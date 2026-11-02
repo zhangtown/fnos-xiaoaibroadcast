@@ -165,7 +165,7 @@ func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
 		"llm": map[string]any{"ready": cfg.LLM.Key != "", "base": cfg.LLM.Base, "model": cfg.LLM.Model, "maxTokens": cfg.LLM.MaxTokens, "effort": cfg.LLM.Effort, "keyMask": maskKey(cfg.LLM.Key)},
 		"storyPrompt": defaultStoryPrompt,
 		"musicCfg": map[string]any{"dirs": cfg.Music.Dirs, "port": cfg.Music.Port, "base": cfg.Music.Base},
-		"speech": map[string]any{"engine": cfg.Speech.Engine, "voice": cfg.Speech.Voice},
+		"speech": map[string]any{"engine": cfg.Speech.Engine, "voice": cfg.Speech.Voice, "base": cfg.Speech.Base, "model": cfg.Speech.Model},
 		"voices": edgeVoices,
 		"openaiVoices": openaiVoices,
 		"next":      NextRuns(cfg, 4),

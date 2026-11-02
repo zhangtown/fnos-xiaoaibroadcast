@@ -46,7 +46,9 @@ type Schedule struct {
 type Speech struct {
 	Engine string `json:"engine"` // " 或 xiaomi = 小爱自带；edge = Edge TTS
 	Voice  string `json:"voice"`  // 音色 id（edge / openai 两套）
-	Model  string `json:"model"`  // OpenAI 兼容语音接口的模型名，默认 tts-1
+	Base   string `json:"base"`   // 语音接口地址，留空就用大模型的地址
+	Key    string `json:"key"`    // 语音接口 Key，留空就用大模型的 Key
+	Model  string `json:"model"`  // 模型名，默认 tts-1
 }
 
 type LLM struct {

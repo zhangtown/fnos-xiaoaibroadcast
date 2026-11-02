@@ -62,9 +62,13 @@ var openaiVoices = []edgeVoice{
 	{"alloy", "alloy · 中性"},
 	{"echo", "echo · 男声"},
 	{"onyx", "onyx · 男声 · 低沉"},
+	{"FunAudioLLM/CosyVoice2-0.5B:claire", "claire · 硅基流动 · 温柔女声"},
+	{"FunAudioLLM/CosyVoice2-0.5B:diana", "diana · 硅基流动 · 欢快女声"},
+	{"FunAudioLLM/CosyVoice2-0.5B:anna", "anna · 硅基流动 · 沉稳女声"},
+	{"FunAudioLLM/CosyVoice2-0.5B:alex", "alex · 硅基流动 · 沉稳男声"},
 }
 
-var ttsHTTP = &http.Client{Timeout: 90 * time.Second}
+var ttsHTTP = &http.Client{Timeout: 240 * time.Second}
 
 func voiceLabel(id string) string {
 	for _, v := range edgeVoices {
@@ -84,10 +88,16 @@ func voiceLabel(id string) string {
 
 // openaiSynth 走 {base}/audio/speech，复用大模型那套地址和 Key。
 func openaiSynth(cfg Config, text, voice string) ([]byte, error) {
-	base := strings.TrimSuffix(strings.TrimSpace(cfg.LLM.Base), "/")
-	key := strings.TrimSpace(cfg.LLM.Key)
+	base := strings.TrimSuffix(strings.TrimSpace(cfg.Speech.Base), "/")
+	if base == "" {
+		base = strings.TrimSuffix(strings.TrimSpace(cfg.LLM.Base), "/")
+	}
+	key := strings.TrimSpace(cfg.Speech.Key)
+	if key == "" {
+		key = strings.TrimSpace(cfg.LLM.Key)
+	}
 	if base == "" || key == "" {
-		return nil, fmt.Errorf("还没配置大模型的地址和 Key（设置 → 大模型）")
+		return nil, fmt.Errorf("还没配置语音接口的地址和 Key（设置 → 故事语音）")
 	}
 	if voice == "" {
 		voice = "nova"
@@ -96,28 +106,62 @@ func openaiSynth(cfg Config, text, voice string) ([]byte, error) {
 	if model == "" {
 		model = "tts-1"
 	}
-	payload, _ := json.Marshal(map[string]any{
-		"model": model, "input": text, "voice": voice, "response_format": "mp3",
-	})
-	req, err := http.NewRequest(http.MethodPost, base+"/audio/speech", bytes.NewReader(payload))
-	if err != nil {
-		return nil, err
+	// 这类云端 TTS 一个字大约半秒，几百字的故事必须拆开送，否则会撞超时。
+	// mp3 是分片拼起来的（同一编码参数，播放器可以连续播）。
+	var audio bytes.Buffer
+	for _, piece := range splitForTTS(text, 110) {
+		payload, _ := json.Marshal(map[string]any{
+			"model": model, "input": piece, "voice": voice, "response_format": "mp3",
+		})
+		req, err := http.NewRequest(http.MethodPost, base+"/audio/speech", bytes.NewReader(payload))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+key)
+		resp, err := ttsHTTP.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("连不上语音接口（%s）：%v", base, err)
+		}
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 20<<20))
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("语音接口返回 HTTP %d：%s", resp.StatusCode, truncate(string(raw), 240))
+		}
+		if len(raw) < 512 {
+			return nil, fmt.Errorf("语音接口只回了 %d 字节，不像音频：%s", len(raw), truncate(string(raw), 200))
+		}
+		audio.Write(raw)
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+key)
-	resp, err := ttsHTTP.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("连不上语音接口（%s）：%v", base, err)
+	return audio.Bytes(), nil
+}
+
+// splitForTTS 按标点把长文本切成不超过 max 个字的片段。
+func splitForTTS(text string, max int) []string {
+	r := []rune(strings.TrimSpace(text))
+	if len(r) <= max {
+		return []string{string(r)}
 	}
-	defer resp.Body.Close()
-	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 20<<20))
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("语音接口返回 HTTP %d：%s", resp.StatusCode, truncate(string(raw), 240))
+	const breaks = "。！？；…!?\n"
+	var out []string
+	for start := 0; start < len(r); {
+		end := start + max
+		if end >= len(r) {
+			end = len(r)
+		} else {
+			for i := end; i > start+max/2; i-- {
+				if strings.ContainsRune(breaks, r[i-1]) {
+					end = i
+					break
+				}
+			}
+		}
+		if piece := strings.TrimSpace(string(r[start:end])); piece != "" {
+			out = append(out, piece)
+		}
+		start = end
 	}
-	if len(raw) < 512 {
-		return nil, fmt.Errorf("语音接口只回了 %d 字节，不像音频：%s", len(raw), truncate(string(raw), 200))
-	}
-	return raw, nil
+	return out
 }
 
 // ---------- Edge TTS ----------
@@ -448,9 +492,12 @@ func (a *App) handleSpeechSave(w http.ResponseWriter, r *http.Request) {
 			ok = true
 		}
 	}
-	if !ok {
+	if !ok && in.Voice == "" {
 		in.Voice = list[0].ID
 	}
+	in.Base = strings.TrimSpace(in.Base)
+	in.Key = strings.TrimSpace(in.Key)
+	in.Model = strings.TrimSpace(in.Model)
 	_ = a.store.Update(func(c *Config) error {
 		c.Speech = in
 		return nil
@@ -464,6 +511,9 @@ func (a *App) handleSpeechTest(w http.ResponseWriter, r *http.Request) {
 		Engine string `json:"engine"`
 		Voice  string `json:"voice"`
 		Text   string `json:"text"`
+		Base   string `json:"base"`
+		Key    string `json:"key"`
+		Model  string `json:"model"`
 	}
 	if !readJSON(w, r, &in) {
 		return
@@ -489,6 +539,15 @@ func (a *App) handleSpeechTest(w http.ResponseWriter, r *http.Request) {
 	probe := cfg
 	probe.Speech.Engine = engine
 	probe.Speech.Voice = voice
+	if b := strings.TrimSpace(in.Base); b != "" {
+		probe.Speech.Base = b
+	}
+	if k := strings.TrimSpace(in.Key); k != "" {
+		probe.Speech.Key = k
+	}
+	if m := strings.TrimSpace(in.Model); m != "" {
+		probe.Speech.Model = m
+	}
 
 	started := time.Now()
 	url, err := a.synthToFile(probe, text, voice)

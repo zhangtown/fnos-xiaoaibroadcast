@@ -1,5 +1,5 @@
 appname=xiaoai-broadcast
-version=2.11.0
+version=2.11.2
 desc=到点让小爱说句话；另有音乐卡片（NAS 曲库播放）和故事卡片（大模型现编童话再让小爱念）。设置卡片里放大模型、曲库音源、票据同步。飞牛统一网关。
 display_name=小爱播报
 maintainer=zhangtown
@@ -10,4 +10,4 @@ source=thirdparty
 os_min_version=1.1.3100
 ctl_stop=true
 install_type=root
-changelog=2.11.0：新增「OpenAI 兼容语音」引擎——直接调 {base}/audio/speech，复用大模型那套地址和 Key（你的 New API 网关自带这个路由），音色 nova/shimmer/fable/alloy/echo/onyx；故事语音可在 小爱自带 / OpenAI 兼容 / Edge 三选一，合成失败自动退回小爱。2.10.x：Edge TTS 各种尝试（微软边缘拦截，保留备用）。
+changelog=2.11.2：长故事按标点切片合成再拼（云端 TTS 约半秒一个字，几百字会撞超时），超时放宽到 240 秒；音色列表补上硅基流动的 CosyVoice2 预置音色（claire/diana/anna/alex，格式为「模型:音色」）。2.11.1：语音接口可配置。2.11.0：OpenAI 兼容语音。

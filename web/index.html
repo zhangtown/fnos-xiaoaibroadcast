@@ -256,10 +256,16 @@
       </div>
       <div class="grow" style="flex:0 1 240px">
         <label class="lbl">音色</label>
-        <select id="speechVoice"></select>
+        <input type="text" id="speechVoice" list="voiceList" placeholder="音色 id" />
+        <datalist id="voiceList"></datalist>
       </div>
       <button class="btn" id="speechTest">试听</button>
       <button class="btn primary" id="speechSave">保存</button>
+    </div>
+    <div class="row" id="speechApiRow" style="margin-top:10px;display:none">
+      <div class="grow"><label class="lbl">语音接口地址（留空用大模型的）</label><input type="text" id="speechBase" placeholder="https://api.siliconflow.cn/v1" /></div>
+      <div class="grow" style="flex:0 1 190px"><label class="lbl">模型</label><input type="text" id="speechModel" placeholder="tts-1" /></div>
+      <div class="grow"><label class="lbl">Key（留空用大模型的）</label><input type="password" id="speechKey" placeholder="留空表示不修改" autocomplete="off" /></div>
     </div>
     <div class="tip" id="speechHint">Edge TTS 需要 NAS 能连上微软的接口；连不上会自动退回小爱，不会没声。</div>
 
@@ -453,6 +459,8 @@ function renderSettings() {
 
   const sp = state.speech || {};
   $("speechEngine").value = sp.engine === "edge" || sp.engine === "openai" ? sp.engine : "";
+  if (document.activeElement !== $("speechBase")) $("speechBase").value = sp.base || "";
+  if (document.activeElement !== $("speechModel")) $("speechModel").value = sp.model || "";
   fillSpeechVoices(sp.voice);
 
   $("ticketState").textContent = state.micoapi ? "票据已同步" : "还没有票据";
@@ -579,23 +587,23 @@ $("musicSave").onclick = async () => {
 function fillSpeechVoices(keep) {
   const engine = $("speechEngine").value;
   const voices = engine === "openai" ? (state.openaiVoices || []) : (state.voices || []);
-  const cur = keep || $("speechVoice").value;
-  $("speechVoice").innerHTML = voices.map((v) => `<option value="${esc(v.id)}">${esc(v.label)}</option>`).join("");
-  if (cur && voices.some((v) => v.id === cur)) $("speechVoice").value = cur;
+  $("voiceList").innerHTML = voices.map((v) => `<option value="${esc(v.id)}">${esc(v.label)}</option>`).join("");
+  $("speechApiRow").style.display = engine === "openai" ? "flex" : "none";
+  if (keep !== undefined) $("speechVoice").value = keep || (voices[0] && voices[0].id) || "";
 }
 
 $("speechEngine").onchange = () => fillSpeechVoices("");
 $("speechSave").onclick = async () => {
-  const r = await api("/api/speech", {engine: $("speechEngine").value, voice: $("speechVoice").value});
+  const r = await api("/api/speech", {engine: $("speechEngine").value, voice: $("speechVoice").value, base: $("speechBase").value, model: $("speechModel").value, key: $("speechKey").value});
   toast(r.ok ? "已保存" : (r.error || "保存失败"), !r.ok);
-  if (r.ok) await loadState();
+  if (r.ok) { $("speechKey").value = ""; await loadState(); }
 };
 
 $("speechTest").onclick = async () => {
   const btn = $("speechTest");
   btn.disabled = true; btn.textContent = "合成中…";
   try {
-    const r = await api("/api/speech/test", {engine: $("speechEngine").value, voice: $("speechVoice").value});
+    const r = await api("/api/speech/test", {engine: $("speechEngine").value, voice: $("speechVoice").value, base: $("speechBase").value, model: $("speechModel").value, key: $("speechKey").value});
     if (r.ok) {
       toast("合成用了 " + (r.ms / 1000).toFixed(1) + " 秒，正在放");
       $("speechHint").innerHTML = `Edge 可用（${esc(r.voice)}，合成 ${(r.ms / 1000).toFixed(1)} 秒）。选「Edge TTS」保存后，讲故事就用这个声音。`;
