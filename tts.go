@@ -222,13 +222,29 @@ func wsRead(r *bufio.Reader) (byte, []byte, error) {
 
 // synthToFile 合成并缓存到数据目录，返回音箱能取到的地址。
 func (a *App) synthToFile(cfg Config, text, voice string) (string, error) {
+	// 两种投送方式：
+	//   1) 默认用应用自己起的音源口（18090）；
+	//   2) 如果填了外链前缀+落盘目录，就写到那个目录、给那个地址（比如走 xiaomusic 的 8090，
+	//      在 18090 被防火墙挡住时用）。
+	extBase := strings.TrimSuffix(strings.TrimSpace(cfg.Speech.ExtBase), "/")
+	extDir := strings.TrimSpace(cfg.Speech.ExtDir)
+	useExt := extBase != "" && extDir != ""
+
 	base := cfg.Music.publicBase()
-	if base == "" {
+	if useExt {
+		base = extBase
+	} else if base == "" {
 		return "", fmt.Errorf("没有可用的音源地址（端口为 0 或没探测到局域网 IP）")
 	}
 	sum := sha1.Sum([]byte(cfg.Speech.Engine + "\x00" + voice + "\x00" + text))
 	name := hex.EncodeToString(sum[:8]) + ".mp3"
+	if useExt {
+		name = "xiaoai-tts-" + name // 放进音乐库时带前缀，便于辨认/清理
+	}
 	dir := filepath.Join(dataDir(), "tts")
+	if useExt {
+		dir = extDir
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
@@ -257,6 +273,9 @@ func (a *App) synthToFile(cfg Config, text, voice string) (string, error) {
 		if err := os.Rename(tmp, full); err != nil {
 			return "", err
 		}
+	}
+	if useExt {
+		return base + "/" + name, nil
 	}
 	return fmt.Sprintf("%s/tts/%s/%s", base, cfg.Music.Token, name), nil
 }

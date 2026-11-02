@@ -1,5 +1,5 @@
 appname=xiaoai-broadcast
-version=2.15.5
+version=2.15.7
 desc=到点让小爱说句话；另有音乐卡片（NAS 曲库播放）和故事卡片（大模型现编童话再让小爱念）。设置卡片里放大模型、曲库音源、票据同步。飞牛统一网关。
 display_name=小爱播报
 maintainer=zhangtown
@@ -10,4 +10,4 @@ source=thirdparty
 os_min_version=1.1.3100
 ctl_stop=true
 install_type=root
-changelog=2.15.5：试听结果里显示音频地址和「NAS 自测」结果，用来区分是音源口/防火墙问题还是音箱到 NAS 的网络问题。2.15.4：音色与模型校验。
+changelog=2.15.7：外链模式下的文件名加 xiaoai-tts- 前缀，便于在音乐库里辨认和清理。2.15.6：外链前缀/落盘目录。2.15.5：试听自检。

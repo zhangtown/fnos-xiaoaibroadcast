@@ -52,6 +52,8 @@ type Speech struct {
 	SecretID  string `json:"secretId"`  // 腾讯云 SecretId
 	SecretKey string `json:"secretKey"` // 腾讯云 SecretKey
 	Region    string `json:"region"`    // 腾讯云地域，默认 ap-shanghai
+	ExtBase   string `json:"extBase"`   // 可选：TTS 外链前缀，例如 http://192.168.31.68:8090/music/xiaoai-tts
+	ExtDir    string `json:"extDir"`    // 可选：TTS 落盘目录，例如 /vol3/1000/music/xiaoai-tts
 }
 
 type LLM struct {
