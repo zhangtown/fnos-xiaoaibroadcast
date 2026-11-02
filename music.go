@@ -144,7 +144,8 @@ func (a *App) startMusicServer() {
 	}
 	addr := fmt.Sprintf(":%d", cfg.Music.Port)
 	mux := http.NewServeMux()
-	mux.Handle("/tts/", a.ttsHandler()) // Edge 合成的 mp3 也从这个端口取
+	mux.Handle("/tts/", a.ttsHandler()) // 合成好的 mp3 从这个端口取
+	mux.Handle("/live/", http.HandlerFunc(a.handleLive))
 	mux.Handle("/", a.musicHandler())
 	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	go func() {

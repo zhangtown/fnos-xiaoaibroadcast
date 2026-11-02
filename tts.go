@@ -19,6 +19,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"sync"
 	"os"
 	"path/filepath"
 	"strings"
@@ -47,6 +48,16 @@ var openaiVoices = []edgeVoice{
 }
 
 var ttsHTTP = &http.Client{Timeout: 240 * time.Second}
+
+// liveTasks 是「流式播放」的待取任务：先把文本挂上，再把 /live/<id> 递给音箱，
+// 音箱来取的时候现场合成、边收边吐。
+var liveTasks sync.Map // id -> liveTask
+
+type liveTask struct {
+	text  string
+	voice string
+	at    time.Time
+}
 
 func voiceLabel(id string) string {
 	for _, list := range [][]edgeVoice{openaiVoices, tencentVoices, qwenVoices} {
@@ -323,8 +334,58 @@ func (a *App) playOnce(url, text string) error {
 	return nil
 }
 
+// handleLive 音箱来取流式音频：现场合成、边收边吐（chunked，无 Content-Length）。
+func (a *App) handleLive(w http.ResponseWriter, r *http.Request) {
+	cfg := a.store.Get()
+	prefix := "/live/" + cfg.Music.Token + "/"
+	if cfg.Music.Token == "" || !strings.HasPrefix(r.URL.Path, prefix) {
+		http.NotFound(w, r)
+		return
+	}
+	id := strings.TrimPrefix(r.URL.Path, prefix)
+	v, ok := liveTasks.LoadAndDelete(id)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	task := v.(liveTask)
+	flusher, _ := w.(http.Flusher)
+	w.Header().Set("Content-Type", "audio/mpeg")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	if flusher != nil {
+		flusher.Flush()
+	}
+	err := qwenSynthStream(cfg, task.text, task.voice, func(chunk []byte) error {
+		if _, werr := w.Write(chunk); werr != nil {
+			return werr
+		}
+		if flusher != nil {
+			flusher.Flush()
+		}
+		return nil
+	})
+	if err != nil {
+		a.store.AddLog("故事", "", false, "流式合成中断："+err.Error())
+	}
+}
+
 // speakStory 讲故事专用：选了合成引擎就先合成再放，失败退回小爱朗读。
 func (a *App) speakStory(cfg Config, text string) error {
+	// 实验模式：先挂任务再递一个“现场合成”的地址给音箱，理论上可以边合成边播
+	if cfg.Speech.Stream && cfg.Speech.Engine == "qwen" && cfg.Music.publicBase() != "" {
+		id := requestID()
+		liveTasks.Store(id, liveTask{text: text, voice: cfg.Speech.Voice, at: time.Now()})
+		liveURL := cfg.Music.publicBase() + "/live/" + cfg.Music.Token + "/" + id
+		go func(pid string) {
+			time.Sleep(3 * time.Minute)
+			liveTasks.Delete(pid)
+		}(id)
+		if err := a.playOnce(liveURL, text); err == nil {
+			a.store.AddLog("故事", text, true, "流式播放（"+voiceLabel(cfg.Speech.Voice)+"）")
+			return nil
+		}
+	}
 	if cfg.Speech.Engine != "" {
 		url, err := a.synthToFile(cfg, text, cfg.Speech.Voice)
 		if err == nil {

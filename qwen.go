@@ -99,11 +99,11 @@ type wsEvent struct {
 	} `json:"payload"`
 }
 
-// qwenSynth 合成一段语音，返回 mp3 字节。
-func qwenSynth(cfg Config, text, voice string) ([]byte, error) {
+// qwenSynthStream 边合成边把音频分片交给 onAudio（流式播放用）；返回错误表示失败。
+func qwenSynthStream(cfg Config, text, voice string, onAudio func([]byte) error) error {
 	key := strings.TrimSpace(cfg.Speech.Key)
 	if key == "" {
-		return nil, fmt.Errorf("还没填阿里云百炼的 API Key（设置 → 故事语音）")
+		return fmt.Errorf("还没填阿里云百炼的 API Key（设置 → 故事语音）")
 	}
 	endpoint := strings.TrimSpace(cfg.Speech.Base)
 	if endpoint == "" {
@@ -124,7 +124,7 @@ func qwenSynth(cfg Config, text, voice string) ([]byte, error) {
 
 	u, err := url.Parse(endpoint)
 	if err != nil || u.Host == "" {
-		return nil, fmt.Errorf("语音接口地址不对：%s", endpoint)
+		return fmt.Errorf("语音接口地址不对：%s", endpoint)
 	}
 	host := u.Host
 	if !strings.Contains(host, ":") {
@@ -133,7 +133,7 @@ func qwenSynth(cfg Config, text, voice string) ([]byte, error) {
 
 	conn, err := tls.DialWithDialer(&netDialer, "tcp", host, &tls.Config{ServerName: u.Hostname(), MinVersion: tls.VersionTLS12})
 	if err != nil {
-		return nil, fmt.Errorf("连不上百炼（%s）：%v", u.Hostname(), err)
+		return fmt.Errorf("连不上百炼（%s）：%v", u.Hostname(), err)
 	}
 	defer conn.Close()
 	_ = conn.SetDeadline(time.Now().Add(150 * time.Second))
@@ -155,12 +155,12 @@ func qwenSynth(cfg Config, text, voice string) ([]byte, error) {
 		"X-DashScope-DataInspection: enable\r\n" +
 		"User-Agent: xiaoai-broadcast/1.0\r\n\r\n"
 	if _, err := conn.Write([]byte(req)); err != nil {
-		return nil, fmt.Errorf("握手发送失败：%v", err)
+		return fmt.Errorf("握手发送失败：%v", err)
 	}
 	br := bufio.NewReaderSize(conn, 64*1024)
 	status, err := br.ReadString('\n')
 	if err != nil {
-		return nil, fmt.Errorf("握手无响应：%v", err)
+		return fmt.Errorf("握手无响应：%v", err)
 	}
 	if !strings.Contains(status, "101") {
 		detail := ""
@@ -173,12 +173,12 @@ func qwenSynth(cfg Config, text, voice string) ([]byte, error) {
 				detail += strings.TrimSpace(line) + " "
 			}
 		}
-		return nil, fmt.Errorf("百炼拒绝了连接（%s）%s 地址=%s", strings.TrimSpace(status), detail, endpoint)
+		return fmt.Errorf("百炼拒绝了连接（%s）%s 地址=%s", strings.TrimSpace(status), detail, endpoint)
 	}
 	for {
 		line, err := br.ReadString('\n')
 		if err != nil {
-			return nil, fmt.Errorf("握手响应不完整：%v", err)
+			return fmt.Errorf("握手响应不完整：%v", err)
 		}
 		if strings.TrimSpace(line) == "" {
 			break
@@ -209,25 +209,30 @@ func qwenSynth(cfg Config, text, voice string) ([]byte, error) {
 		},
 	}
 	if err := wsWriteJSON(conn, runTask); err != nil {
-		return nil, fmt.Errorf("发送 run-task 失败：%v", err)
+		return fmt.Errorf("发送 run-task 失败：%v", err)
 	}
 
-	var audio bytes.Buffer
 	started := false
+	got := false
 	pieces := splitForTTS(text, 300)
 	pieceIdx := 0
 
 	for {
 		op, payload, err := wsRead(br)
 		if err != nil {
-			if audio.Len() > 0 {
-				return audio.Bytes(), nil
+			if got {
+				return nil
 			}
-			return nil, fmt.Errorf("接收失败：%v", err)
+			return fmt.Errorf("接收失败：%v", err)
 		}
 		switch op {
 		case 0x2: // binary：音频
-			audio.Write(payload)
+			got = true
+			if onAudio != nil {
+				if err := onAudio(payload); err != nil {
+					return err
+				}
+			}
 		case 0x1: // text：事件
 			var ev wsEvent
 			if json.Unmarshal(payload, &ev) != nil {
@@ -242,7 +247,7 @@ func qwenSynth(cfg Config, text, voice string) ([]byte, error) {
 						"payload": map[string]any{"input": map[string]any{"text": pieces[pieceIdx]}},
 					}
 					if err := wsWriteJSON(conn, msg); err != nil {
-						return nil, fmt.Errorf("发送 continue-task 失败：%v", err)
+						return fmt.Errorf("发送 continue-task 失败：%v", err)
 					}
 					pieceIdx++
 				}
@@ -251,28 +256,28 @@ func qwenSynth(cfg Config, text, voice string) ([]byte, error) {
 					"payload": map[string]any{"input": map[string]any{}},
 				}
 				if err := wsWriteJSON(conn, fin); err != nil {
-					return nil, fmt.Errorf("发送 finish-task 失败：%v", err)
+					return fmt.Errorf("发送 finish-task 失败：%v", err)
 				}
 			case "task-finished":
-				if audio.Len() == 0 {
-					return nil, fmt.Errorf("百炼没有返回音频")
+				if !got {
+					return fmt.Errorf("百炼没有返回音频")
 				}
-				return audio.Bytes(), nil
+				return nil
 			case "task-failed":
 				hint := ""
 				if strings.Contains(ev.Header.ErrorMessage, "411") || strings.Contains(ev.Header.ErrorCode, "InvalidParameter") {
 					hint = "；多半是音色不属于当前模型（" + model + "），换一个该模型支持的音色"
 				}
-				return nil, fmt.Errorf("百炼合成失败（%s）：%s%s", ev.Header.ErrorCode, ev.Header.ErrorMessage, hint)
+				return fmt.Errorf("百炼合成失败（%s）：%s%s", ev.Header.ErrorCode, ev.Header.ErrorMessage, hint)
 			}
 		case 0x8:
-			if audio.Len() > 0 {
-				return audio.Bytes(), nil
+			if got {
+				return nil
 			}
 			if !started {
-				return nil, fmt.Errorf("连接被关闭（没有收到 task-started）")
+				return fmt.Errorf("连接被关闭（没有收到 task-started）")
 			}
-			return nil, fmt.Errorf("连接被关闭，没有音频返回")
+			return fmt.Errorf("连接被关闭，没有音频返回")
 		}
 	}
 }
@@ -283,4 +288,20 @@ func wsWriteJSON(w interface{ Write([]byte) (int, error) }, v any) error {
 		return err
 	}
 	return wsWrite(w, 0x1, b)
+}
+
+// qwenSynth 收集完整音频（文件模式用）。
+func qwenSynth(cfg Config, text, voice string) ([]byte, error) {
+	var buf bytes.Buffer
+	err := qwenSynthStream(cfg, text, voice, func(chunk []byte) error {
+		buf.Write(chunk)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if buf.Len() == 0 {
+		return nil, fmt.Errorf("百炼没有返回音频")
+	}
+	return buf.Bytes(), nil
 }
