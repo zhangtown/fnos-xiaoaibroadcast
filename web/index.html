@@ -468,6 +468,7 @@ function renderSettings() {
   if (document.activeElement !== $("speechBase")) $("speechBase").value = sp.base || "";
   if (document.activeElement !== $("speechModel")) $("speechModel").value = sp.model || "";
   if (document.activeElement !== $("speechRegion")) $("speechRegion").value = sp.region || "";
+  if (document.activeElement !== $("speechHint")) speechStatus();
   fillSpeechVoices(sp.voice);
 
   $("ticketState").textContent = state.micoapi ? "票据已同步" : "还没有票据";
@@ -620,10 +621,21 @@ $("speechEngine").onchange = () => {
   fillSpeechVoices("");
 };
 
+// 把「密钥到底存没存上」显示出来，省得靠猜
+function speechStatus() {
+  const sp = state.speech || {};
+  const engine = $("speechEngine").value || sp.engine || "";
+  const parts = [];
+  if (sp.engine) parts.push("当前已保存：" + ({ "": "小爱自带", openai: "OpenAI 兼容", qwen: "百炼 Qwen", tencent: "腾讯云" }[sp.engine] || sp.engine));
+  if (sp.hasKey) parts.push("Key " + (sp.keyMask || "已保存"));
+  if (sp.hasSecret) parts.push("SecretId 已保存");
+  if (sp.voice) parts.push("音色 " + sp.voice);
+  if (parts.length) $("speechHint").innerHTML = esc(parts.join(" · ")) ;
+}
 $("speechSave").onclick = async () => {
   const r = await api("/api/speech", {engine: $("speechEngine").value, voice: $("speechVoice").value, base: $("speechBase").value, model: $("speechModel").value, key: $("speechKey").value, secretId: $("speechSid").value, secretKey: $("speechSkey").value, region: $("speechRegion").value});
   toast(r.ok ? "已保存" : (r.error || "保存失败"), !r.ok);
-  if (r.ok) { $("speechKey").value = ""; await loadState(); }
+  if (r.ok) { $("speechKey").value = ""; $("speechSkey").value = ""; await loadState(); toast("已保存（Key 已写入配置）"); }
 };
 
 $("speechTest").onclick = async () => {

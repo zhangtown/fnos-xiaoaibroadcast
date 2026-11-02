@@ -58,6 +58,10 @@ func qwenSynth(cfg Config, text, voice string) ([]byte, error) {
 		endpoint = qwenDefaultURL
 	}
 	endpoint = strings.Replace(endpoint, "https://", "wss://", 1)
+	// 防呆：引擎切到百炼但地址还是别的家（比如硅基流动的 /v1）时，别把请求发到人家那儿去
+	if !strings.Contains(endpoint, "aliyuncs.com") && !strings.Contains(endpoint, "dashscope") {
+		endpoint = qwenDefaultURL
+	}
 	model := strings.TrimSpace(cfg.Speech.Model)
 	if model == "" {
 		model = qwenDefaultModel
@@ -117,7 +121,7 @@ func qwenSynth(cfg Config, text, voice string) ([]byte, error) {
 				detail += strings.TrimSpace(line) + " "
 			}
 		}
-		return nil, fmt.Errorf("百炼拒绝了连接（%s）%s", strings.TrimSpace(status), detail)
+		return nil, fmt.Errorf("百炼拒绝了连接（%s）%s 地址=%s", strings.TrimSpace(status), detail, endpoint)
 	}
 	for {
 		line, err := br.ReadString('\n')
