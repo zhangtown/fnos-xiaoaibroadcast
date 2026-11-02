@@ -244,6 +244,25 @@
     <div class="tip" id="llmHint"></div>
 
     <div class="sep"></div>
+    <div class="tip" style="margin:0 0 10px"><b>故事语音</b>（只影响「让小爱讲」，播报仍走小爱自带）</div>
+    <div class="row">
+      <div class="grow" style="flex:0 1 190px">
+        <label class="lbl">引擎</label>
+        <select id="speechEngine">
+          <option value="">小爱自带（稳）</option>
+          <option value="edge">Edge TTS（微软）</option>
+        </select>
+      </div>
+      <div class="grow" style="flex:0 1 240px">
+        <label class="lbl">音色</label>
+        <select id="speechVoice"></select>
+      </div>
+      <button class="btn" id="speechTest">试听</button>
+      <button class="btn primary" id="speechSave">保存</button>
+    </div>
+    <div class="tip" id="speechHint">Edge TTS 需要 NAS 能连上微软的接口；连不上会自动退回小爱，不会没声。</div>
+
+    <div class="sep"></div>
     <div class="tip" style="margin:0 0 10px"><b>曲库与音源</b>（音箱从这里取歌）</div>
     <div class="row">
       <div class="grow"><label class="lbl">音乐目录（一行一个）</label><textarea id="musicDirs" rows="2"></textarea></div>
@@ -431,6 +450,12 @@ function renderSettings() {
   if (document.activeElement !== $("musicBase")) $("musicBase").value = mc.base || "";
   $("musicCfgHint").innerHTML = `改端口或目录后需要重启应用才生效。当前音源地址：<code>${esc(state.music.base || "（未探测到）")}</code>`;
 
+  const sp = state.speech || {};
+  $("speechEngine").value = sp.engine === "edge" ? "edge" : "";
+  const voices = state.voices || [];
+  $("speechVoice").innerHTML = voices.map((v) => `<option value="${esc(v.id)}">${esc(v.label)}</option>`).join("");
+  $("speechVoice").value = sp.voice || (voices[0] && voices[0].id) || "";
+
   $("ticketState").textContent = state.micoapi ? "票据已同步" : "还没有票据";
   $("about").innerHTML = `小爱播报 ${esc(state.version || "")} · 配置在 <code>/vol1/1000/docker/xiaoai-broadcast/</code>`;
 }
@@ -552,6 +577,27 @@ $("musicSave").onclick = async () => {
   await loadSongs();
 };
 
+$("speechSave").onclick = async () => {
+  const r = await api("/api/speech", {engine: $("speechEngine").value, voice: $("speechVoice").value});
+  toast(r.ok ? "已保存" : (r.error || "保存失败"), !r.ok);
+  if (r.ok) await loadState();
+};
+
+$("speechTest").onclick = async () => {
+  const btn = $("speechTest");
+  btn.disabled = true; btn.textContent = "合成中…";
+  try {
+    const r = await api("/api/speech/test", {voice: $("speechVoice").value});
+    if (r.ok) {
+      toast("合成用了 " + (r.ms / 1000).toFixed(1) + " 秒，正在放");
+      $("speechHint").innerHTML = `Edge 可用（${esc(r.voice)}，合成 ${(r.ms / 1000).toFixed(1)} 秒）。选「Edge TTS」保存后，讲故事就用这个声音。`;
+    } else {
+      toast("失败", true);
+      $("speechHint").innerHTML = `Edge 合成失败：${esc(r.error || "")}（这种情况下故事会自动退回小爱朗读）`;
+    }
+  } catch (e) { toast(e.message, true); }
+  finally { btn.disabled = false; btn.textContent = "试听"; }
+};
 $("syncBtn").onclick = async () => {
   const btn = $("syncBtn");
   btn.disabled = true; btn.textContent = "同步中…";

@@ -42,6 +42,12 @@ type Schedule struct {
 	Enabled bool   `json:"enabled"`
 }
 
+// Speech 是「故事语音」：默认走小爱自带 TTS，选了 edge 才用微软的合成。
+type Speech struct {
+	Engine string `json:"engine"` // " 或 xiaomi = 小爱自带；edge = Edge TTS
+	Voice  string `json:"voice"`  // Edge 音色 id
+}
+
 type LLM struct {
 	Base      string `json:"base"`      // OpenAI 兼容地址，如 https://api.deepseek.com/v1
 	Key       string `json:"key"`       // API Key
@@ -72,6 +78,7 @@ type Config struct {
 	Options   Options    `json:"options"`
 	Music     MusicLib   `json:"music"`
 	LLM       LLM        `json:"llm"`
+	Speech    Speech     `json:"speech"`
 }
 
 type Store struct {
@@ -109,6 +116,7 @@ func defaults() *Config {
 		Options: Options{Volume: 0, Retry: 1},
 		Music:   defaultMusicLib(),
 		LLM:      LLM{Base: "https://api.deepseek.com/v1", Model: "deepseek-chat", MaxTokens: 800},
+		Speech:  Speech{Engine: "", Voice: "zh-CN-XiaoxiaoNeural"},
 		Schedules: []Schedule{{
 			ID:      "morning",
 			Time:    "07:00",

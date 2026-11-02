@@ -73,6 +73,8 @@ func main() {
 	mux.HandleFunc("/api/story/speak", app.handleStorySpeak)
 	mux.HandleFunc("/api/classics", app.handleClassics)
 	mux.HandleFunc("/api/classic", app.handleClassicGet)
+	mux.HandleFunc("/api/speech", app.handleSpeechSave)
+	mux.HandleFunc("/api/speech/test", app.handleSpeechTest)
 	mux.HandleFunc("/api/llm", app.handleLLM)
 	mux.HandleFunc("/api/llm/test", app.handleLLMTest)
 
@@ -163,6 +165,8 @@ func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
 		"llm": map[string]any{"ready": cfg.LLM.Key != "", "base": cfg.LLM.Base, "model": cfg.LLM.Model, "maxTokens": cfg.LLM.MaxTokens, "effort": cfg.LLM.Effort, "keyMask": maskKey(cfg.LLM.Key)},
 		"storyPrompt": defaultStoryPrompt,
 		"musicCfg": map[string]any{"dirs": cfg.Music.Dirs, "port": cfg.Music.Port, "base": cfg.Music.Base},
+		"speech": map[string]any{"engine": cfg.Speech.Engine, "voice": cfg.Speech.Voice},
+		"voices": edgeVoices,
 		"next":      NextRuns(cfg, 4),
 		"logs":      logs,
 	})

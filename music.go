@@ -143,7 +143,10 @@ func (a *App) startMusicServer() {
 		return
 	}
 	addr := fmt.Sprintf(":%d", cfg.Music.Port)
-	srv := &http.Server{Addr: addr, Handler: a.musicHandler(), ReadHeaderTimeout: 10 * time.Second}
+	mux := http.NewServeMux()
+	mux.Handle("/tts/", a.ttsHandler()) // Edge 合成的 mp3 也从这个端口取
+	mux.Handle("/", a.musicHandler())
+	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	go func() {
 		if err := srv.ListenAndServe(); err != nil {
 			a.store.AddLog("系统", "", false, fmt.Sprintf("音源端口 %s 启动失败：%v", addr, err))
