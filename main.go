@@ -49,6 +49,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go app.scheduleLoop(ctx)
+	app.applyImport()
 	app.startMusicServer()
 	app.seedStories()
 
@@ -394,6 +395,35 @@ func deliveryFailed(err error) bool {
 	return false
 }
 
+// applyImport 读一次 settings-import.json（数据目录里放好的话），把语音设置写进配置后改名，
+// 这样不用在页面上一格格手填。
+func (a *App) applyImport() {
+	p := filepath.Join(dataDir(), "settings-import.json")
+	data, err := os.ReadFile(p)
+	if err != nil {
+		return
+	}
+	var in struct {
+		Speech *Speech `json:"speech"`
+	}
+	if err := json.Unmarshal(data, &in); err != nil {
+		a.store.AddLog("系统", "", false, "导入设置失败："+err.Error())
+		_ = os.Rename(p, p+".bad")
+		return
+	}
+	if in.Speech != nil {
+		sp := *in.Speech
+		if sp.Engine != "openai" && sp.Engine != "edge" {
+			sp.Engine = "openai"
+		}
+		_ = a.store.Update(func(c *Config) error {
+			c.Speech = sp
+			return nil
+		})
+		a.store.AddLog("系统", "", true, "已导入语音设置："+sp.Engine+" / "+sp.Model)
+	}
+	_ = os.Rename(p, p+".applied")
+}
 // ---------- 调度 ----------
 
 func (a *App) scheduleLoop(ctx context.Context) {
