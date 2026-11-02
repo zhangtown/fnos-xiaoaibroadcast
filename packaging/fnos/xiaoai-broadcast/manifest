@@ -1,5 +1,5 @@
 appname=xiaoai-broadcast
-version=2.14.3
+version=2.14.4
 desc=到点让小爱说句话；另有音乐卡片（NAS 曲库播放）和故事卡片（大模型现编童话再让小爱念）。设置卡片里放大模型、曲库音源、票据同步。飞牛统一网关。
 display_name=小爱播报
 maintainer=zhangtown
@@ -10,4 +10,4 @@ source=thirdparty
 os_min_version=1.1.3100
 ctl_stop=true
 install_type=root
-changelog=2.14.3：大模型、曲库两组表单也加上「改动后不被定时刷新覆盖」的保护（含模型下拉），并显示「有未保存的修改」；保存后解锁。2.14.2：语音设置同名问题。
+changelog=2.14.4：试听/保存按钮挪到 API Key 下面；百炼模型可选（3.1/3.0 × flash/plus）；音色列表补到 17 个中文音色（含儿童故事向的温怀清、童声龙牛牛等）。2.14.3：各表单防覆盖。

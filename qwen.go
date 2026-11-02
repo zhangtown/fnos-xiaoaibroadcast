@@ -25,12 +25,33 @@ const (
 	qwenDefaultVoice = "longanhuan_v3.1"
 )
 
-// 文档里出现的系统音色；其余可以自己填（音色列表随账号开通情况而变）。
+// 百炼 Qwen-Audio-TTS 的模型（北京/新加坡都能用的四个）。
+var qwenModels = []string{
+	"qwen-audio-3.1-tts-flash",
+	"qwen-audio-3.1-tts-plus",
+	"qwen-audio-3.0-tts-flash",
+	"qwen-audio-3.0-tts-plus",
+}
+
+// 系统音色（挑的是适合讲故事/陪伴的中文音色，其余可自己填）。
 var qwenVoices = []edgeVoice{
-	{"longanhuan_v3.1", "龙欢 · 女声（文档示例）"},
-	{"longanhuan_v3", "龙欢 v3 · 女声"},
-	{"longshuo_v3", "龙硕 · 男声"},
-	{"loongstella_v3", "Stella · 女声"},
+	{"wenhuaiqing_v3.1", "温怀清 · 女声 · 清亮柔和（儿童故事）"},
+	{"qiaoxiaojiao_v3.1", "乔小娇 · 女声 · 俏丽可爱"},
+	{"xiaxiaochen_v3.1", "夏小晨 · 女声 · 元气明亮"},
+	{"yuxiaoyun_v3.1", "于小云 · 女声 · 元气亲切"},
+	{"longanhuan_v3.1", "龙安欢 · 女声 · 活力"},
+	{"longanlingxin_v3.1", "龙安灵心 · 女声 · 温柔守候"},
+	{"longanfengyue_v3.1", "龙安风悦 · 女声 · 自然"},
+	{"anruorou_v3.1", "安若柔 · 女声 · 气声知性"},
+	{"anxiaolan_v3.1", "安小岚 · 女声 · 清甜纯净"},
+	{"longpaopao_v3.1", "龙泡泡 · 女声 · 童趣"},
+	{"longniuniu_v3.1", "龙牛牛 · 男童声 · 儿童有声书"},
+	{"longjielidou_v3.1", "龙杰力豆 · 男童声 · 天真"},
+	{"longke_v3.1", "龙可 · 儿童 · 懵懂"},
+	{"anmingyuan_v3.1", "安明远 · 男声 · 清亮自然"},
+	{"xunanchuan_v3.1", "许南川 · 男声 · 磁性"},
+	{"longshuo_v3.1", "龙硕 · 男声 · 干练"},
+	{"loongbella_v3.1", "Bella · 女声 · 中英双语"},
 }
 
 type wsEvent struct {
