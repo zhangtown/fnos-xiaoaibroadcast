@@ -743,6 +743,8 @@ function speechStatus() {
   if (sp.hasSecret) parts.push("SecretId 已保存");
   if (sp.voice) parts.push("音色 " + sp.voice);
   if (speechDirty) parts.push("⚠ 有未保存的修改");
+  const u = (state.usage || {}).total;
+  if (u && u.calls) parts.push(`本地已合成 ${u.calls} 次 / ${u.chars} 字`);
   if (parts.length) $("speechHint").innerHTML = esc(parts.join(" · "));
 }
 $("speechSave").onclick = async () => {

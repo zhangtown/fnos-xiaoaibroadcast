@@ -236,6 +236,7 @@ func (a *App) synthToFile(cfg Config, text, voice string) (string, error) {
 	if st, err := os.Stat(full); err != nil || st.Size() == 0 {
 		var mp3 []byte
 		var err error
+		started := time.Now()
 		switch cfg.Speech.Engine {
 		case "openai":
 			mp3, err = openaiSynth(cfg, text, voice)
@@ -247,6 +248,8 @@ func (a *App) synthToFile(cfg Config, text, voice string) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		// 只有真的调了接口才记账（命中缓存不重复计）
+		a.usage.add(cfg.Speech.Engine+"/"+cfg.Speech.Model, len([]rune(text)), time.Since(started).Milliseconds())
 		tmp := full + ".tmp"
 		if err := os.WriteFile(tmp, mp3, 0o644); err != nil {
 			return "", err

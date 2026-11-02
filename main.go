@@ -32,6 +32,7 @@ var version = "dev"
 type App struct {
 	store *Store
 	xm    *XM
+	usage *usageStore
 }
 
 func main() {
@@ -43,7 +44,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("初始化数据目录 %s 失败：%v", dataDir(), err)
 	}
-	app := &App{store: store, xm: NewXM(store)}
+	app := &App{store: store, xm: NewXM(store), usage: newUsageStore(dataDir())}
 	store.AddLog("系统", "", true, "应用启动，版本 "+version)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -170,6 +171,7 @@ func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
 		"tencentVoices": tencentVoices,
 		"qwenVoices": qwenVoices,
 		"qwenModels": qwenModels,
+		"usage": a.usage.snapshot(),
 		"qwenVoicesByModel": qwenVoicesByModel,
 		"openaiVoices": openaiVoices,
 		"next":      NextRuns(cfg, 4),

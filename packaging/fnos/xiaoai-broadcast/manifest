@@ -1,5 +1,5 @@
 appname=xiaoai-broadcast
-version=2.15.1
+version=2.15.2
 desc=到点让小爱说句话；另有音乐卡片（NAS 曲库播放）和故事卡片（大模型现编童话再让小爱念）。设置卡片里放大模型、曲库音源、票据同步。飞牛统一网关。
 display_name=小爱播报
 maintainer=zhangtown
@@ -10,4 +10,4 @@ source=thirdparty
 os_min_version=1.1.3100
 ctl_stop=true
 install_type=root
-changelog=2.15.1：音色按模型分组——换模型自动换音色列表（3.1-flash 18 个、3.1-plus 4 个旗舰音色），当前音色不属于新模型时自动退回该模型第一个。2.15.0：故事语音重排与真下拉。
+changelog=2.15.2：本地合成用量统计（次数/字数/耗时，落盘 dataDir/usage.json，命中缓存不重复计），设置里直接显示；供估算消耗用，余额仍需看阿里云控制台。2.15.1：音色按模型分组。
