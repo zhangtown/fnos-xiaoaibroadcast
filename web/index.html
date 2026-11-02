@@ -307,6 +307,7 @@ const DAYS = ["一","二","三","四","五","六","日"];
 let state = {schedules: [], devices: [], music: {items: [], folders: []}};
 let dirty = false;
 let speechDirty = false; // 语音设置这块被改过之后，定时刷新不要再回填覆盖
+const formDirty = { llm: false, music: false };
 let volBusy = false, volTimer = null;
 let storyText = "";
 
@@ -439,30 +440,37 @@ function renderDevice() {
 
 function renderSettings() {
   const llm = state.llm || {};
-  if (document.activeElement !== $("llmBase")) $("llmBase").value = llm.base || "";
-  const MODEL_PRESETS = ["deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-max", "deepseek-v4-flash-none", "deepseek-v4-pro", "deepseek-v4-pro-max", "deepseek-v4-pro-none"];
-  const cur = llm.model || "deepseek-chat";
-  $("llmModelSel").innerHTML = MODEL_PRESETS.map((m) => `<option value="${m}">${m}</option>`).join("")
-    + `<option value="__custom__">自定义…</option>`;
-  if (MODEL_PRESETS.includes(cur)) {
-    $("llmModelSel").value = cur;
-    $("llmModelCustomWrap").hidden = true;
-  } else {
-    $("llmModelSel").value = "__custom__";
-    $("llmModelCustomWrap").hidden = false;
-    if (document.activeElement !== $("llmModel")) $("llmModel").value = cur;
+  // 每组表单各自记 dirty：动过就不回填，免得几十秒后把用户刚填的冲掉
+  if (!formDirty.llm) {
+    if (document.activeElement !== $("llmBase")) $("llmBase").value = llm.base || "";
+    const MODEL_PRESETS = ["deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-max", "deepseek-v4-flash-none", "deepseek-v4-pro", "deepseek-v4-pro-max", "deepseek-v4-pro-none"];
+    const cur = llm.model || "deepseek-chat";
+    $("llmModelSel").innerHTML = MODEL_PRESETS.map((m) => `<option value="${m}">${m}</option>`).join("")
+      + `<option value="__custom__">自定义…</option>`;
+    if (MODEL_PRESETS.includes(cur)) {
+      $("llmModelSel").value = cur;
+      $("llmModelCustomWrap").hidden = true;
+    } else {
+      $("llmModelSel").value = "__custom__";
+      $("llmModelCustomWrap").hidden = false;
+      if (document.activeElement !== $("llmModel")) $("llmModel").value = cur;
+    }
+    if (document.activeElement !== $("llmMaxTokens")) $("llmMaxTokens").value = llm.maxTokens || 0;
+    if (document.activeElement !== $("llmEffort")) $("llmEffort").value = llm.effort || "";
   }
-  if (document.activeElement !== $("llmMaxTokens")) $("llmMaxTokens").value = llm.maxTokens || 0;
-  if (document.activeElement !== $("llmEffort")) $("llmEffort").value = llm.effort || "";
-  $("llmHint").innerHTML = llm.ready
+  $("llmHint").innerHTML = (llm.ready
     ? `已配置（Key ${esc(llm.keyMask || "")}）。点「测试连接」可以确认地址和 Key 是否还行。`
-    : `还没配置：填一个兼容 OpenAI 的接口地址 + API Key（比如 DeepSeek 的 <code>https://api.deepseek.com/v1</code> + <code>deepseek-chat</code>）。`;
+    : `还没配置：填一个兼容 OpenAI 的接口地址 + API Key（比如 DeepSeek 的 <code>https://api.deepseek.com/v1</code> + <code>deepseek-chat</code>）。`)
+    + (formDirty.llm ? ` <b>⚠ 有未保存的修改</b>` : "");
 
   const mc = state.musicCfg || {};
-  if (document.activeElement !== $("musicDirs")) $("musicDirs").value = (mc.dirs || []).join("\n");
-  if (document.activeElement !== $("musicPort")) $("musicPort").value = mc.port || 0;
-  if (document.activeElement !== $("musicBase")) $("musicBase").value = mc.base || "";
-  $("musicCfgHint").innerHTML = `改端口或目录后需要重启应用才生效。当前音源地址：<code>${esc(state.music.base || "（未探测到）")}</code>`;
+  if (!formDirty.music) {
+    if (document.activeElement !== $("musicDirs")) $("musicDirs").value = (mc.dirs || []).join("\n");
+    if (document.activeElement !== $("musicPort")) $("musicPort").value = mc.port || 0;
+    if (document.activeElement !== $("musicBase")) $("musicBase").value = mc.base || "";
+  }
+  $("musicCfgHint").innerHTML = `改端口或目录后需要重启应用才生效。当前音源地址：<code>${esc(state.music.base || "（未探测到）")}</code>`
+    + (formDirty.music ? ` <b>⚠ 有未保存的修改</b>` : "");
 
   const sp = state.speech || {};
   // 只有没动过这块表单时才回填，否则会把用户刚选的预设冲掉
@@ -582,6 +590,7 @@ $("llmSave").onclick = async () => {
   const r = await api("/api/llm", {base: $("llmBase").value, model, key: $("llmKey").value, maxTokens: +$("llmMaxTokens").value || 0, effort: $("llmEffort").value});
   if (!r.ok) { toast(r.error || "保存失败", true); return; }
   $("llmKey").value = "";
+  formDirty.llm = false;
   toast("已保存");
   await loadState();
 };
@@ -590,6 +599,7 @@ $("musicSave").onclick = async () => {
   const dirs = $("musicDirs").value.split("\n").map((s) => s.trim()).filter(Boolean);
   const r = await api("/api/music/settings", {dirs, port: +$("musicPort").value || 0, base: $("musicBase").value});
   if (!r.ok) { toast(r.error || "保存失败", true); return; }
+  formDirty.music = false;
   toast(r.note || "已保存");
   await loadState();
   await loadFolders();
@@ -626,6 +636,17 @@ $("speechEngine").onchange = () => {
 };
 
 // 把「密钥到底存没存上」显示出来，省得靠猜
+// 大模型 / 曲库两组表单同样加 dirty 保护
+[["llm", ["llmBase", "llmModel", "llmModelSel", "llmMaxTokens", "llmEffort", "llmKey"]],
+ ["music", ["musicDirs", "musicPort", "musicBase"]]].forEach(([group, ids]) => {
+  ids.forEach((id) => {
+    const el = $(id);
+    if (!el) return;
+    const mark = () => { formDirty[group] = true; };
+    el.addEventListener("input", mark);
+    el.addEventListener("change", mark);
+  });
+});
 // 任何一个语音字段被动过，就标记 dirty，直到保存
 ["speechEngine", "speechBase", "speechModel", "speechVoice", "speechKey", "speechSid", "speechSkey", "speechRegion"].forEach((id) => {
   const el = $(id);
