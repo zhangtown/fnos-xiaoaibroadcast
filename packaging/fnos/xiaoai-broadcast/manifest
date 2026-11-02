@@ -1,5 +1,5 @@
 appname=xiaoai-broadcast
-version=2.16.1
+version=2.16.2
 desc=到点让小爱说句话；另有音乐卡片（NAS 曲库播放）和故事卡片（大模型现编童话再让小爱念）。设置卡片里放大模型、曲库音源、票据同步。飞牛统一网关。
 display_name=小爱播报
 maintainer=zhangtown
@@ -10,4 +10,4 @@ source=thirdparty
 os_min_version=1.1.3100
 ctl_stop=true
 install_type=root
-changelog=2.16.1：真正修掉「讲故事仍用小爱音色」——讲故事的接口在 story.go（上次误改到 main.go 的试一句）；现在讲完会提示实际用的引擎与音色，未保存合成引擎时状态行也会明说。2.16.0：停止按钮。
+changelog=2.16.2：故事卡片加「预生成全部故事」——按当前引擎/音色把 27 篇内置故事一次性合成进缓存（后台跑、显示进度），之后点「让小爱讲」秒播。2.16.1：讲故事走合成引擎。

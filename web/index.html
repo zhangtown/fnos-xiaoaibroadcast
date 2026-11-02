@@ -197,6 +197,7 @@
         <button class="btn" id="storyRegen">重新生成</button>
         <button class="btn primary" id="storySpeakBtn">让小爱讲</button>
         <button class="btn" id="storyStopBtn">停止</button>
+        <button class="btn ghost" id="prewarmBtn">预生成全部故事</button>
         <span class="h" id="storyMeta" style="font-size:12.5px;color:var(--muted)"></span>
       </div>
     </div>
@@ -867,6 +868,28 @@ async function genStory() {
 $("storyGenBtn").onclick = genStory;
 $("storyRegen").onclick = genStory;
 
+$("prewarmBtn").onclick = async () => {
+  const r = await api("/api/tts/prewarm", {});
+  if (!r.ok) { toast(r.error || "启动失败", true); return; }
+  toast(r.note || ("开始预生成 " + (r.total || 0) + " 篇，可以先去干别的"));
+  pollPrewarm();
+};
+
+let prewarmTimer = null;
+async function pollPrewarm() {
+  clearTimeout(prewarmTimer);
+  try {
+    const s = await api("/api/state");
+    state = {...state, ...s};
+    const w = state.prewarm || {};
+    if (w.running) {
+      $("storyHint").innerHTML = `正在预生成 ${w.done}/${w.total}：${esc(w.current || "")}（已用 ${w.elapsed || 0} 秒，后台跑，不影响其他操作）`;
+      prewarmTimer = setTimeout(pollPrewarm, 3000);
+    } else if (w.done) {
+      $("storyHint").innerHTML = `预生成完成 ${w.done}/${w.total}${w.error ? "，中断原因：" + esc(w.error) : ""}。之后点「让小爱讲」直接读缓存。`;
+    }
+  } catch (e) { prewarmTimer = setTimeout(pollPrewarm, 5000); }
+}
 $("storyStopBtn").onclick = async () => {
   const btn = $("storyStopBtn");
   btn.disabled = true; btn.textContent = "停止中…";

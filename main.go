@@ -33,6 +33,7 @@ type App struct {
 	store    *Store
 	xm       *XM
 	usage    *usageStore
+	prewarm  prewarmState
 	musicErr string // 音源端口绑定失败的原因（端口被占、权限不足等）
 }
 
@@ -78,6 +79,7 @@ func main() {
 	mux.HandleFunc("/api/classic", app.handleClassicGet)
 	mux.HandleFunc("/api/speech", app.handleSpeechSave)
 	mux.HandleFunc("/api/speech/test", app.handleSpeechTest)
+	mux.HandleFunc("/api/tts/prewarm", app.handlePrewarm)
 	mux.HandleFunc("/api/llm", app.handleLLM)
 	mux.HandleFunc("/api/llm/test", app.handleLLMTest)
 
@@ -173,6 +175,7 @@ func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
 		"qwenVoices": qwenVoices,
 		"qwenModels": qwenModels,
 		"usage": a.usage.snapshot(),
+		"prewarm": a.prewarm.snapshot(),
 		"qwenVoicesByModel": qwenVoicesByModel,
 		"openaiVoices": openaiVoices,
 		"next":      NextRuns(cfg, 4),
