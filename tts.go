@@ -521,6 +521,10 @@ func (a *App) handleSpeechSave(w http.ResponseWriter, r *http.Request) {
 	_ = a.store.Update(func(c *Config) error {
 		old := c.Speech
 		c.Speech = in
+		// 页面上的密钥框留空 = 不修改（否则每次保存都会把 key 清掉）
+		if in.Key == "" {
+			c.Speech.Key = old.Key
+		}
 		if in.SecretID == "" {
 			c.Speech.SecretID = old.SecretID
 		}

@@ -604,7 +604,24 @@ function fillSpeechVoices(keep) {
   if (keep !== undefined) $("speechVoice").value = keep || (voices[0] && voices[0].id) || "";
 }
 
-$("speechEngine").onchange = () => fillSpeechVoices("");
+// 选中引擎后带入它的默认地址/模型/音色；API Key 一律留空让人自己填
+const SPEECH_PRESETS = {
+  openai: { base: "https://api.siliconflow.cn/v1", model: "FunAudioLLM/CosyVoice2-0.5B" },
+  qwen: { base: "wss://dashscope.aliyuncs.com/api-ws/v1/inference", model: "qwen-audio-3.1-tts-flash" },
+  tencent: { base: "", model: "" },
+  edge: { base: "", model: "" },
+  "": { base: "", model: "" },
+};
+
+$("speechEngine").onchange = () => {
+  const engine = $("speechEngine").value;
+  const preset = SPEECH_PRESETS[engine] || { base: "", model: "" };
+  $("speechBase").value = preset.base;
+  $("speechModel").value = preset.model;
+  $("speechKey").value = "";
+  fillSpeechVoices("");
+};
+
 $("speechSave").onclick = async () => {
   const r = await api("/api/speech", {engine: $("speechEngine").value, voice: $("speechVoice").value, base: $("speechBase").value, model: $("speechModel").value, key: $("speechKey").value, secretId: $("speechSid").value, secretKey: $("speechSkey").value, region: $("speechRegion").value});
   toast(r.ok ? "已保存" : (r.error || "保存失败"), !r.ok);
