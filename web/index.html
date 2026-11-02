@@ -705,8 +705,14 @@ $("speechEngine").onchange = () => {
 $("speechModel").onchange = () => {
   // 换模型就要换音色列表；当前音色不在新模型里就退回第一个
   const newModel = $("speechModel").value === "__custom__" ? $("speechModelCustom").value.trim() : $("speechModel").value;
-  const first = speechVoicesFor($("speechEngine").value, newModel)[0];
-  fillSpeechOptions(first ? first.id : "", newModel);
+  const pool = speechVoicesFor($("speechEngine").value, newModel);
+  const cur = currentSpeechVoice();
+  const compatible = pool.some((v) => v.id === cur);
+  const pick = compatible ? cur : (pool[0] ? pool[0].id : "");
+  fillSpeechOptions(pick, newModel);
+  if (!compatible && pool.length) {
+    toast("音色不属于这个模型，已换成 " + pool[0].id);
+  }
   speechDirty = true;
   speechStatus();
 };

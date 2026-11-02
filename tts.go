@@ -330,6 +330,24 @@ func (a *App) handleSpeechSave(w http.ResponseWriter, r *http.Request) {
 	if !validEngine(in.Engine) {
 		in.Engine = ""
 	}
+	// 百炼的音色跟模型绑定，先挡一道，别等接口回 411
+	if in.Engine == "qwen" {
+		valid := qwenVoicesFor(in.Model)
+		match := false
+		names := make([]string, 0, 4)
+		for i, v := range valid {
+			if v.ID == in.Voice {
+				match = true
+			}
+			if i < 4 {
+				names = append(names, v.ID)
+			}
+		}
+		if !match {
+			writeJSON(w, 400, map[string]any{"ok": false, "error": "音色 " + in.Voice + " 不属于模型 " + in.Model + "；该模型可用：" + strings.Join(names, "、")})
+			return
+		}
+	}
 	list := voicesFor(in.Engine)
 	ok := false
 	for _, v := range list {
@@ -415,6 +433,25 @@ func (a *App) handleSpeechTest(w http.ResponseWriter, r *http.Request) {
 	}
 	if s := strings.TrimSpace(in.Region); s != "" {
 		probe.Speech.Region = s
+	}
+
+	// 试听也先挡：音色不属于模型时直接给出可用列表
+	if engine == "qwen" {
+		valid := qwenVoicesFor(probe.Speech.Model)
+		match := false
+		names := make([]string, 0, 4)
+		for i, v := range valid {
+			if v.ID == voice {
+				match = true
+			}
+			if i < 4 {
+				names = append(names, v.ID)
+			}
+		}
+		if !match {
+			writeJSON(w, 200, map[string]any{"ok": false, "error": "音色 " + voice + " 不属于模型 " + probe.Speech.Model + "；该模型可用：" + strings.Join(names, "、")})
+			return
+		}
 	}
 
 	started := time.Now()

@@ -259,7 +259,11 @@ func qwenSynth(cfg Config, text, voice string) ([]byte, error) {
 				}
 				return audio.Bytes(), nil
 			case "task-failed":
-				return nil, fmt.Errorf("百炼合成失败（%s）：%s", ev.Header.ErrorCode, ev.Header.ErrorMessage)
+				hint := ""
+				if strings.Contains(ev.Header.ErrorMessage, "411") || strings.Contains(ev.Header.ErrorCode, "InvalidParameter") {
+					hint = "；多半是音色不属于当前模型（" + model + "），换一个该模型支持的音色"
+				}
+				return nil, fmt.Errorf("百炼合成失败（%s）：%s%s", ev.Header.ErrorCode, ev.Header.ErrorMessage, hint)
 			}
 		case 0x8:
 			if audio.Len() > 0 {
