@@ -170,10 +170,17 @@
   </section>
 
   <section class="card">
-    <h2>故事 <span class="hint">先生成，满意了再让小爱讲</span></h2>
+    <h2>故事 <span class="hint">选经典故事，或让大模型现编；看好了再让小爱讲</span></h2>
     <div class="row">
       <div class="grow">
-        <label class="lbl">提示词（可留空，留空就随便讲一个童话）</label>
+        <label class="lbl">经典故事（读本地故事集，不再生成）</label>
+        <select id="classicPick"><option value="">（加载中…）</option></select>
+      </div>
+      <button class="btn" id="classicReload">刷新</button>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div class="grow">
+        <label class="lbl">或者让大模型现编（提示词可留空）</label>
         <input type="text" id="storyPrompt" placeholder="比如：讲一个小熊不肯刷牙的故事" />
       </div>
       <button class="btn primary" id="storyGenBtn">生成故事</button>
@@ -206,7 +213,14 @@
     <div class="tip" style="margin:0 0 10px"><b>大模型</b>（讲故事用，OpenAI 兼容接口）</div>
     <div class="row">
       <div class="grow"><label class="lbl">接口地址</label><input type="text" id="llmBase" placeholder="https://api.deepseek.com/v1" /></div>
-      <div class="grow" style="flex:0 1 180px"><label class="lbl">模型</label><input type="text" id="llmModel" list="modelList" placeholder="deepseek-chat" /></div>
+      <div class="grow" style="flex:0 1 210px">
+        <label class="lbl">模型</label>
+        <select id="llmModelSel"></select>
+      </div>
+      <div class="grow" style="flex:0 1 210px" id="llmModelCustomWrap" hidden>
+        <label class="lbl">自定义模型名</label>
+        <input type="text" id="llmModel" placeholder="填接口支持的模型名" />
+      </div>
     </div>
     <div class="row" style="margin-top:10px">
       <div class="grow"><label class="lbl">API Key</label><input type="password" id="llmKey" placeholder="留空表示不修改" autocomplete="off" /></div>
@@ -393,7 +407,18 @@ function renderDevice() {
 function renderSettings() {
   const llm = state.llm || {};
   if (document.activeElement !== $("llmBase")) $("llmBase").value = llm.base || "";
-  if (document.activeElement !== $("llmModel")) $("llmModel").value = llm.model || "";
+  const MODEL_PRESETS = ["deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-max", "deepseek-v4-flash-none", "deepseek-v4-pro", "deepseek-v4-pro-max", "deepseek-v4-pro-none"];
+  const cur = llm.model || "deepseek-chat";
+  $("llmModelSel").innerHTML = MODEL_PRESETS.map((m) => `<option value="${m}">${m}</option>`).join("")
+    + `<option value="__custom__">自定义…</option>`;
+  if (MODEL_PRESETS.includes(cur)) {
+    $("llmModelSel").value = cur;
+    $("llmModelCustomWrap").hidden = true;
+  } else {
+    $("llmModelSel").value = "__custom__";
+    $("llmModelCustomWrap").hidden = false;
+    if (document.activeElement !== $("llmModel")) $("llmModel").value = cur;
+  }
   if (document.activeElement !== $("llmMaxTokens")) $("llmMaxTokens").value = llm.maxTokens || 0;
   if (document.activeElement !== $("llmEffort")) $("llmEffort").value = llm.effort || "";
   $("llmHint").innerHTML = llm.ready
@@ -492,7 +517,8 @@ $("llmTest").onclick = async () => {
   const btn = $("llmTest");
   btn.disabled = true; btn.textContent = "测试中…";
   try {
-    const r = await api("/api/llm/test", {base: $("llmBase").value, model: $("llmModel").value, key: $("llmKey").value});
+    const model = $("llmModelSel").value === "__custom__" ? $("llmModel").value.trim() : $("llmModelSel").value;
+    const r = await api("/api/llm/test", {base: $("llmBase").value, model, key: $("llmKey").value});
     if (r.ok) {
       const models = r.models || [];
       $("modelList").innerHTML = models.map((m) => `<option value="${esc(m)}"></option>`).join("");
@@ -508,7 +534,8 @@ $("llmTest").onclick = async () => {
 };
 
 $("llmSave").onclick = async () => {
-  const r = await api("/api/llm", {base: $("llmBase").value, model: $("llmModel").value, key: $("llmKey").value, maxTokens: +$("llmMaxTokens").value || 0, effort: $("llmEffort").value});
+  const model = $("llmModelSel").value === "__custom__" ? $("llmModel").value.trim() : $("llmModelSel").value;
+  const r = await api("/api/llm", {base: $("llmBase").value, model, key: $("llmKey").value, maxTokens: +$("llmMaxTokens").value || 0, effort: $("llmEffort").value});
   if (!r.ok) { toast(r.error || "保存失败", true); return; }
   $("llmKey").value = "";
   toast("已保存");
@@ -537,6 +564,36 @@ $("syncBtn").onclick = async () => {
   finally { btn.disabled = false; btn.textContent = "重新同步票据"; }
 };
 
+// ---------- 经典故事集 ----------
+async function loadClassics() {
+  try {
+    const r = await api("/api/classics");
+    const items = (r && r.items) || [];
+    $("classicPick").innerHTML = items.length
+      ? `<option value="">（选一篇…）</option>` + items.map((i) => `<option value="${esc(i.name)}">${esc(i.name)}（${i.chars} 字）</option>`).join("")
+      : `<option value="">（故事集是空的）</option>`;
+  } catch (e) { /* 故事集读不到不影响其他功能 */ }
+}
+
+$("classicPick").onchange = async () => {
+  const name = $("classicPick").value;
+  if (!name) return;
+  try {
+    const r = await api("/api/classic", {name});
+    if (!r.ok) { toast(r.error || "读不到这篇", true); return; }
+    storyText = r.text;
+    $("storyBox").style.display = "block";
+    $("storyText").textContent = storyText;
+    $("storyMeta").textContent = "经典故事 · " + r.chars + " 字";
+    toast("已选《" + name + "》，点「让小爱讲」");
+  } catch (e) { toast(e.message, true); }
+};
+
+$("classicReload").onclick = async () => { await loadClassics(); toast("故事集已刷新"); };
+
+$("llmModelSel").onchange = () => {
+  $("llmModelCustomWrap").hidden = $("llmModelSel").value !== "__custom__";
+};
 // ---------- 故事：先生成，再讲 ----------
 async function genStory() {
   const btn = $("storyGenBtn"), regen = $("storyRegen");
@@ -639,7 +696,7 @@ $("testBtn").onclick = async () => {
 };
 
 loadState()
-  .then(() => Promise.all([loadFolders(), loadVolume()]))
+  .then(() => Promise.all([loadFolders(), loadVolume(), loadClassics()]))
   .then(loadSongs)
   .catch((e) => { $("badge").textContent = "连不上应用"; toast(e.message, true); });
 setInterval(() => { if (!dirty) loadState().catch(() => {}); }, 30000);

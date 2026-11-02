@@ -50,6 +50,7 @@ func main() {
 	defer cancel()
 	go app.scheduleLoop(ctx)
 	app.startMusicServer()
+	app.seedStories()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", app.handleIndex)
@@ -70,6 +71,8 @@ func main() {
 	mux.HandleFunc("/api/music/settings", app.handleMusicSettings)
 	mux.HandleFunc("/api/story/generate", app.handleStoryGenerate)
 	mux.HandleFunc("/api/story/speak", app.handleStorySpeak)
+	mux.HandleFunc("/api/classics", app.handleClassics)
+	mux.HandleFunc("/api/classic", app.handleClassicGet)
 	mux.HandleFunc("/api/llm", app.handleLLM)
 	mux.HandleFunc("/api/llm/test", app.handleLLMTest)
 
