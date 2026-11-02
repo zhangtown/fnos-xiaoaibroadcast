@@ -1,5 +1,5 @@
 appname=xiaoai-broadcast
-version=2.11.3
+version=2.12.0
 desc=到点让小爱说句话；另有音乐卡片（NAS 曲库播放）和故事卡片（大模型现编童话再让小爱念）。设置卡片里放大模型、曲库音源、票据同步。飞牛统一网关。
 display_name=小爱播报
 maintainer=zhangtown
@@ -10,4 +10,4 @@ source=thirdparty
 os_min_version=1.1.3100
 ctl_stop=true
 install_type=root
-changelog=2.11.3：启动时自动读取数据目录里的 settings-import.json 导入语音设置（填好后改名为 .applied），免去在页面手填；其余同 2.11.2。
+changelog=2.12.0：新增「腾讯云语音合成」引擎（TC3 签名，一次请求拿 mp3，延迟几百毫秒），7 个预置音色；设置里填 SecretId/SecretKey/地域即可，试听支持临时填。故事语音现在四选一：小爱自带 / 腾讯云 / OpenAI 兼容 / Edge。2.11.x：可配置语音接口与导入设置。

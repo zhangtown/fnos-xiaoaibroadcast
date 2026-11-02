@@ -44,11 +44,14 @@ type Schedule struct {
 
 // Speech 是「故事语音」：默认走小爱自带 TTS，选了 edge 才用微软的合成。
 type Speech struct {
-	Engine string `json:"engine"` // " 或 xiaomi = 小爱自带；edge = Edge TTS
-	Voice  string `json:"voice"`  // 音色 id（edge / openai 两套）
-	Base   string `json:"base"`   // 语音接口地址，留空就用大模型的地址
-	Key    string `json:"key"`    // 语音接口 Key，留空就用大模型的 Key
-	Model  string `json:"model"`  // 模型名，默认 tts-1
+	Engine    string `json:"engine"`    // 空 = 小爱自带；openai / edge / tencent
+	Voice     string `json:"voice"`     // openai=音色名，tencent=VoiceType，edge=音色 id
+	Base      string `json:"base"`      // 语音接口地址，留空就用大模型的
+	Key       string `json:"key"`       // 语音接口 Key，留空就用大模型的
+	Model     string `json:"model"`     // 模型名，默认 tts-1
+	SecretID  string `json:"secretId"`  // 腾讯云 SecretId
+	SecretKey string `json:"secretKey"` // 腾讯云 SecretKey
+	Region    string `json:"region"`    // 腾讯云地域，默认 ap-shanghai
 }
 
 type LLM struct {

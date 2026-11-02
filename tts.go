@@ -71,6 +71,11 @@ var openaiVoices = []edgeVoice{
 var ttsHTTP = &http.Client{Timeout: 240 * time.Second}
 
 func voiceLabel(id string) string {
+	for _, v := range tencentVoices {
+		if v.ID == id {
+			return v.Label
+		}
+	}
 	for _, v := range edgeVoices {
 		if v.ID == id {
 			return v.Label
@@ -413,9 +418,12 @@ func (a *App) synthToFile(cfg Config, text, voice string) (string, error) {
 	if st, err := os.Stat(full); err != nil || st.Size() == 0 {
 		var mp3 []byte
 		var err error
-		if cfg.Speech.Engine == "openai" {
+		switch cfg.Speech.Engine {
+		case "openai":
 			mp3, err = openaiSynth(cfg, text, voice)
-		} else {
+		case "tencent":
+			mp3, err = tencentSynth(cfg, text, voice)
+		default:
 			mp3, err = edgeSynth(text, voice)
 		}
 		if err != nil {
@@ -457,7 +465,7 @@ func (a *App) ttsHandler() http.Handler {
 
 // speakStory 讲故事专用：开了合成引擎就先合成再放，失败退回小爱朗读。
 func (a *App) speakStory(cfg Config, text string) error {
-	if cfg.Speech.Engine == "openai" || cfg.Speech.Engine == "edge" {
+	if cfg.Speech.Engine == "openai" || cfg.Speech.Engine == "edge" || cfg.Speech.Engine == "tencent" {
 		url, err := a.synthToFile(cfg, text, cfg.Speech.Voice)
 		if err == nil {
 			err = a.xm.PlayURL(url, 0)
@@ -479,12 +487,15 @@ func (a *App) handleSpeechSave(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &in) {
 		return
 	}
-	if in.Engine != "edge" && in.Engine != "openai" {
+	if in.Engine != "edge" && in.Engine != "openai" && in.Engine != "tencent" {
 		in.Engine = ""
 	}
 	list := edgeVoices
-	if in.Engine == "openai" {
+	switch in.Engine {
+	case "openai":
 		list = openaiVoices
+	case "tencent":
+		list = tencentVoices
 	}
 	ok := false
 	for _, v := range list {
@@ -499,7 +510,14 @@ func (a *App) handleSpeechSave(w http.ResponseWriter, r *http.Request) {
 	in.Key = strings.TrimSpace(in.Key)
 	in.Model = strings.TrimSpace(in.Model)
 	_ = a.store.Update(func(c *Config) error {
+		old := c.Speech
 		c.Speech = in
+		if in.SecretID == "" {
+			c.Speech.SecretID = old.SecretID
+		}
+		if in.SecretKey == "" {
+			c.Speech.SecretKey = old.SecretKey
+		}
 		return nil
 	})
 	writeJSON(w, 200, map[string]any{"ok": true})
@@ -514,13 +532,16 @@ func (a *App) handleSpeechTest(w http.ResponseWriter, r *http.Request) {
 		Base   string `json:"base"`
 		Key    string `json:"key"`
 		Model  string `json:"model"`
+		SecretID  string `json:"secretId"`
+		SecretKey string `json:"secretKey"`
+		Region    string `json:"region"`
 	}
 	if !readJSON(w, r, &in) {
 		return
 	}
 	cfg := a.store.Get()
 	engine := in.Engine
-	if engine != "openai" && engine != "edge" {
+	if engine != "openai" && engine != "edge" && engine != "tencent" {
 		engine = cfg.Speech.Engine
 	}
 	if engine == "" {
@@ -547,6 +568,15 @@ func (a *App) handleSpeechTest(w http.ResponseWriter, r *http.Request) {
 	}
 	if m := strings.TrimSpace(in.Model); m != "" {
 		probe.Speech.Model = m
+	}
+	if s := strings.TrimSpace(in.SecretID); s != "" {
+		probe.Speech.SecretID = s
+	}
+	if s := strings.TrimSpace(in.SecretKey); s != "" {
+		probe.Speech.SecretKey = s
+	}
+	if s := strings.TrimSpace(in.Region); s != "" {
+		probe.Speech.Region = s
 	}
 
 	started := time.Now()

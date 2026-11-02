@@ -251,6 +251,7 @@
         <select id="speechEngine">
           <option value="">小爱自带（稳）</option>
           <option value="openai">OpenAI 兼容语音（用大模型的地址和 Key）</option>
+          <option value="tencent">腾讯云语音合成（需 SecretId/SecretKey）</option>
           <option value="edge">Edge TTS（微软，多数网络会被拒）</option>
         </select>
       </div>
@@ -266,6 +267,11 @@
       <div class="grow"><label class="lbl">语音接口地址（留空用大模型的）</label><input type="text" id="speechBase" placeholder="https://api.siliconflow.cn/v1" /></div>
       <div class="grow" style="flex:0 1 190px"><label class="lbl">模型</label><input type="text" id="speechModel" placeholder="tts-1" /></div>
       <div class="grow"><label class="lbl">Key（留空用大模型的）</label><input type="password" id="speechKey" placeholder="留空表示不修改" autocomplete="off" /></div>
+    </div>
+    <div class="row" id="speechTencentRow" style="margin-top:10px;display:none">
+      <div class="grow"><label class="lbl">SecretId</label><input type="text" id="speechSid" placeholder="AKID..." autocomplete="off" /></div>
+      <div class="grow"><label class="lbl">SecretKey</label><input type="password" id="speechSkey" placeholder="留空表示不修改" autocomplete="off" /></div>
+      <div class="grow" style="flex:0 1 150px"><label class="lbl">地域</label><input type="text" id="speechRegion" placeholder="ap-shanghai" /></div>
     </div>
     <div class="tip" id="speechHint">Edge TTS 需要 NAS 能连上微软的接口；连不上会自动退回小爱，不会没声。</div>
 
@@ -458,9 +464,10 @@ function renderSettings() {
   $("musicCfgHint").innerHTML = `改端口或目录后需要重启应用才生效。当前音源地址：<code>${esc(state.music.base || "（未探测到）")}</code>`;
 
   const sp = state.speech || {};
-  $("speechEngine").value = sp.engine === "edge" || sp.engine === "openai" ? sp.engine : "";
+  $("speechEngine").value = ["edge", "openai", "tencent"].includes(sp.engine) ? sp.engine : "";
   if (document.activeElement !== $("speechBase")) $("speechBase").value = sp.base || "";
   if (document.activeElement !== $("speechModel")) $("speechModel").value = sp.model || "";
+  if (document.activeElement !== $("speechRegion")) $("speechRegion").value = sp.region || "";
   fillSpeechVoices(sp.voice);
 
   $("ticketState").textContent = state.micoapi ? "票据已同步" : "还没有票据";
@@ -586,15 +593,18 @@ $("musicSave").onclick = async () => {
 
 function fillSpeechVoices(keep) {
   const engine = $("speechEngine").value;
-  const voices = engine === "openai" ? (state.openaiVoices || []) : (state.voices || []);
+  let voices = state.voices || [];
+  if (engine === "openai") voices = state.openaiVoices || [];
+  if (engine === "tencent") voices = state.tencentVoices || [];
   $("voiceList").innerHTML = voices.map((v) => `<option value="${esc(v.id)}">${esc(v.label)}</option>`).join("");
   $("speechApiRow").style.display = engine === "openai" ? "flex" : "none";
+  $("speechTencentRow").style.display = engine === "tencent" ? "flex" : "none";
   if (keep !== undefined) $("speechVoice").value = keep || (voices[0] && voices[0].id) || "";
 }
 
 $("speechEngine").onchange = () => fillSpeechVoices("");
 $("speechSave").onclick = async () => {
-  const r = await api("/api/speech", {engine: $("speechEngine").value, voice: $("speechVoice").value, base: $("speechBase").value, model: $("speechModel").value, key: $("speechKey").value});
+  const r = await api("/api/speech", {engine: $("speechEngine").value, voice: $("speechVoice").value, base: $("speechBase").value, model: $("speechModel").value, key: $("speechKey").value, secretId: $("speechSid").value, secretKey: $("speechSkey").value, region: $("speechRegion").value});
   toast(r.ok ? "已保存" : (r.error || "保存失败"), !r.ok);
   if (r.ok) { $("speechKey").value = ""; await loadState(); }
 };
@@ -603,7 +613,7 @@ $("speechTest").onclick = async () => {
   const btn = $("speechTest");
   btn.disabled = true; btn.textContent = "合成中…";
   try {
-    const r = await api("/api/speech/test", {engine: $("speechEngine").value, voice: $("speechVoice").value, base: $("speechBase").value, model: $("speechModel").value, key: $("speechKey").value});
+    const r = await api("/api/speech/test", {engine: $("speechEngine").value, voice: $("speechVoice").value, base: $("speechBase").value, model: $("speechModel").value, key: $("speechKey").value, secretId: $("speechSid").value, secretKey: $("speechSkey").value, region: $("speechRegion").value});
     if (r.ok) {
       toast("合成用了 " + (r.ms / 1000).toFixed(1) + " 秒，正在放");
       $("speechHint").innerHTML = `Edge 可用（${esc(r.voice)}，合成 ${(r.ms / 1000).toFixed(1)} 秒）。选「Edge TTS」保存后，讲故事就用这个声音。`;
