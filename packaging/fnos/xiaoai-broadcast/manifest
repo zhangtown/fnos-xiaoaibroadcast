@@ -1,5 +1,5 @@
 appname=xiaoai-broadcast
-version=2.14.1
+version=2.14.2
 desc=到点让小爱说句话；另有音乐卡片（NAS 曲库播放）和故事卡片（大模型现编童话再让小爱念）。设置卡片里放大模型、曲库音源、票据同步。飞牛统一网关。
 display_name=小爱播报
 maintainer=zhangtown
@@ -10,4 +10,4 @@ source=thirdparty
 os_min_version=1.1.3100
 ctl_stop=true
 install_type=root
-changelog=2.14.1：修「百炼 404」——引擎切到百炼但地址还留着别家的值时会自动回落到官方地址；设置里显示已保存的引擎/Key 掩码/音色，保存成功有明确提示。2.14.0：删 Edge、记录移到最后。
+changelog=2.14.2：修「选了引擎后地址/模型被刷回去」——语音设置改动后会锁定表单，不再被定时刷新覆盖，并提示「有未保存的修改」；保存成功后解锁。2.14.1：百炼 404 防呆与 Key 状态显示。

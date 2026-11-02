@@ -306,6 +306,7 @@ const $ = (id) => document.getElementById(id);
 const DAYS = ["一","二","三","四","五","六","日"];
 let state = {schedules: [], devices: [], music: {items: [], folders: []}};
 let dirty = false;
+let speechDirty = false; // 语音设置这块被改过之后，定时刷新不要再回填覆盖
 let volBusy = false, volTimer = null;
 let storyText = "";
 
@@ -464,12 +465,15 @@ function renderSettings() {
   $("musicCfgHint").innerHTML = `改端口或目录后需要重启应用才生效。当前音源地址：<code>${esc(state.music.base || "（未探测到）")}</code>`;
 
   const sp = state.speech || {};
-  $("speechEngine").value = ["openai", "tencent", "qwen"].includes(sp.engine) ? sp.engine : "";
-  if (document.activeElement !== $("speechBase")) $("speechBase").value = sp.base || "";
-  if (document.activeElement !== $("speechModel")) $("speechModel").value = sp.model || "";
-  if (document.activeElement !== $("speechRegion")) $("speechRegion").value = sp.region || "";
+  // 只有没动过这块表单时才回填，否则会把用户刚选的预设冲掉
+  if (!speechDirty) {
+    $("speechEngine").value = ["openai", "tencent", "qwen"].includes(sp.engine) ? sp.engine : "";
+    $("speechBase").value = sp.base || "";
+    $("speechModel").value = sp.model || "";
+    $("speechRegion").value = sp.region || "";
+    fillSpeechVoices(sp.voice);
+  }
   if (document.activeElement !== $("speechHint")) speechStatus();
-  fillSpeechVoices(sp.voice);
 
   $("ticketState").textContent = state.micoapi ? "票据已同步" : "还没有票据";
   $("about").innerHTML = `小爱播报 ${esc(state.version || "")} · 配置在 <code>/vol1/1000/docker/xiaoai-broadcast/</code>`;
@@ -622,6 +626,14 @@ $("speechEngine").onchange = () => {
 };
 
 // 把「密钥到底存没存上」显示出来，省得靠猜
+// 任何一个语音字段被动过，就标记 dirty，直到保存
+["speechEngine", "speechBase", "speechModel", "speechVoice", "speechKey", "speechSid", "speechSkey", "speechRegion"].forEach((id) => {
+  const el = $(id);
+  if (!el) return;
+  const mark = () => { speechDirty = true; speechStatus(); };
+  el.addEventListener("input", mark);
+  el.addEventListener("change", mark);
+});
 function speechStatus() {
   const sp = state.speech || {};
   const engine = $("speechEngine").value || sp.engine || "";
@@ -630,12 +642,13 @@ function speechStatus() {
   if (sp.hasKey) parts.push("Key " + (sp.keyMask || "已保存"));
   if (sp.hasSecret) parts.push("SecretId 已保存");
   if (sp.voice) parts.push("音色 " + sp.voice);
-  if (parts.length) $("speechHint").innerHTML = esc(parts.join(" · ")) ;
+  if (speechDirty) parts.push("⚠ 有未保存的修改");
+  if (parts.length) $("speechHint").innerHTML = esc(parts.join(" · "));
 }
 $("speechSave").onclick = async () => {
   const r = await api("/api/speech", {engine: $("speechEngine").value, voice: $("speechVoice").value, base: $("speechBase").value, model: $("speechModel").value, key: $("speechKey").value, secretId: $("speechSid").value, secretKey: $("speechSkey").value, region: $("speechRegion").value});
   toast(r.ok ? "已保存" : (r.error || "保存失败"), !r.ok);
-  if (r.ok) { $("speechKey").value = ""; $("speechSkey").value = ""; await loadState(); toast("已保存（Key 已写入配置）"); }
+  if (r.ok) { $("speechKey").value = ""; $("speechSkey").value = ""; speechDirty = false; await loadState(); toast("已保存（Key 已写入配置）"); }
 };
 
 $("speechTest").onclick = async () => {
