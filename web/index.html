@@ -282,7 +282,7 @@
       <div class="grow"><label class="lbl">SecretKey</label><input type="password" id="speechSkey" placeholder="留空表示不修改" autocomplete="off" /></div>
       <div class="grow" style="flex:0 1 150px"><label class="lbl">地域</label><input type="text" id="speechRegion" placeholder="ap-shanghai" /></div>
     </div>
-    <div class="tip" id="speechHint">合成失败会自动退回小爱朗读，不会没声。</div>
+    <div class="tip" id="speechHint">音色跟模型绑定，换模型会自动换列表；合成失败会自动退回小爱朗读。</div>
 
 
     <div class="sep"></div>
@@ -626,8 +626,12 @@ function speechModelsFor(engine) {
   if (engine === "openai") return ["tts-1", "FunAudioLLM/CosyVoice2-0.5B"];
   return [];
 }
-function speechVoicesFor(engine) {
-  if (engine === "qwen") return state.qwenVoices || [];
+function speechVoicesFor(engine, model) {
+  if (engine === "qwen") {
+    // 音色跟模型绑定：换了模型就换一份列表
+    const byModel = state.qwenVoicesByModel || {};
+    return byModel[model] || state.qwenVoices || [];
+  }
   if (engine === "openai") return state.openaiVoices || [];
   if (engine === "tencent") return state.tencentVoices || [];
   return [];
@@ -654,7 +658,7 @@ function fillSpeechOptions(voice, model) {
     $("speechModelCustom").value = curModel || "";
   }
 
-  const voices = speechVoicesFor(engine);
+  const voices = speechVoicesFor(engine, $("speechModel").value);
   const curVoice = voice !== undefined ? voice : $("speechVoice").value;
   $("speechVoice").innerHTML = voices.map((v) => `<option value="${esc(v.id)}">${esc(v.label)}</option>`).join("")
     + `<option value="__custom__">自定义…</option>`;
@@ -693,7 +697,14 @@ $("speechEngine").onchange = () => {
   fillSpeechOptions(preset.voice, preset.model);
 };
 
-$("speechModel").onchange = () => { syncSpeechCustomRow(); speechDirty = true; speechStatus(); };
+$("speechModel").onchange = () => {
+  // 换模型就要换音色列表；当前音色不在新模型里就退回第一个
+  const newModel = $("speechModel").value === "__custom__" ? $("speechModelCustom").value.trim() : $("speechModel").value;
+  const first = speechVoicesFor($("speechEngine").value, newModel)[0];
+  fillSpeechOptions(first ? first.id : "", newModel);
+  speechDirty = true;
+  speechStatus();
+};
 $("speechVoice").onchange = () => { syncSpeechCustomRow(); speechDirty = true; speechStatus(); };
 
 function currentSpeechModel() {

@@ -170,6 +170,7 @@ func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
 		"tencentVoices": tencentVoices,
 		"qwenVoices": qwenVoices,
 		"qwenModels": qwenModels,
+		"qwenVoicesByModel": qwenVoicesByModel,
 		"openaiVoices": openaiVoices,
 		"next":      NextRuns(cfg, 4),
 		"logs":      logs,

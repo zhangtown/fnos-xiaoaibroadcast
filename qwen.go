@@ -33,8 +33,9 @@ var qwenModels = []string{
 	"qwen-audio-3.0-tts-plus",
 }
 
-// 系统音色（挑的是适合讲故事/陪伴的中文音色，其余可自己填）。
-var qwenVoices = []edgeVoice{
+// 音色是跟模型绑定的（文档：不能跨模型混用，混了会报 InvalidParameter）。
+// 这里按模型分开列，换模型时前端会跟着换列表。
+var qwenVoices31Flash = []edgeVoice{
 	{"wenhuaiqing_v3.1", "温怀清 · 女声 · 清亮柔和（儿童故事）"},
 	{"qiaoxiaojiao_v3.1", "乔小娇 · 女声 · 俏丽可爱"},
 	{"xiaxiaochen_v3.1", "夏小晨 · 女声 · 元气明亮"},
@@ -44,6 +45,7 @@ var qwenVoices = []edgeVoice{
 	{"longanfengyue_v3.1", "龙安风悦 · 女声 · 自然"},
 	{"anruorou_v3.1", "安若柔 · 女声 · 气声知性"},
 	{"anxiaolan_v3.1", "安小岚 · 女声 · 清甜纯净"},
+	{"xieshurou_v3.1", "谢舒柔 · 女声 · 柔和知性"},
 	{"longpaopao_v3.1", "龙泡泡 · 女声 · 童趣"},
 	{"longniuniu_v3.1", "龙牛牛 · 男童声 · 儿童有声书"},
 	{"longjielidou_v3.1", "龙杰力豆 · 男童声 · 天真"},
@@ -54,6 +56,35 @@ var qwenVoices = []edgeVoice{
 	{"loongbella_v3.1", "Bella · 女声 · 中英双语"},
 }
 
+// 3.1-plus 文档里只列了四个“旗舰音色”
+var qwenVoices31Plus = []edgeVoice{
+	{"longanlingxin_v3.1", "龙安灵心 · 女声 · 旗舰"},
+	{"longanhuan_v3.1", "龙安欢 · 女声 · 旗舰"},
+	{"longanfengyue_v3.1", "龙安风悦 · 女声 · 旗舰"},
+	{"xunanchuan_v3.1", "许南川 · 男声 · 旗舰"},
+}
+
+// 3.0 系列文档没单独给表，先沿用同档音色；不对的话服务端会明确报错
+var qwenVoices30Flash = qwenVoices31Flash
+var qwenVoices30Plus = qwenVoices31Plus
+
+// qwenVoicesByModel 按模型给音色；自定义模型回落到 flash 那一份。
+var qwenVoicesByModel = map[string][]edgeVoice{
+	"qwen-audio-3.1-tts-flash": qwenVoices31Flash,
+	"qwen-audio-3.1-tts-plus":  qwenVoices31Plus,
+	"qwen-audio-3.0-tts-flash": qwenVoices30Flash,
+	"qwen-audio-3.0-tts-plus":  qwenVoices30Plus,
+}
+
+// qwenVoices 是所有候选的并集，仅用于校验/兜底。
+var qwenVoices = append(append([]edgeVoice{}, qwenVoices31Flash...), qwenVoices31Plus...)
+
+func qwenVoicesFor(model string) []edgeVoice {
+	if v, ok := qwenVoicesByModel[model]; ok {
+		return v
+	}
+	return qwenVoices31Flash
+}
 type wsEvent struct {
 	Header struct {
 		Event        string `json:"event"`
