@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-const defaultStoryPrompt = "给幼儿园的小朋友讲一个温暖的小童话，主角是一个小朋友和小动物。故事要口语化、句子短，结尾用一句话点出一个小道理。"
+const defaultStoryPrompt = "给六岁的小朋友讲一个温暖的睡前故事，主角是一个小朋友和一只小动物。故事要有开头、有经过、有结尾，中间多写一点对话和小细节，结尾用一句话点出一个小道理。"
 
 var storyHTTP = &http.Client{Timeout: 75 * time.Second}
 
@@ -46,7 +46,7 @@ func (a *App) GenerateStory(prompt string) (storyResult, error) {
 		"model": model,
 		"messages": []map[string]string{
 			{"role": "system", "content": "你是给小朋友讲故事的作者。只输出故事正文：不要标题、不要分段编号、不要 markdown、不要解说。"},
-			{"role": "user", "content": prompt + "\n\n朗读要求：250-350 字，句子短，口语化，适合小爱音箱直接念出来。"},
+			{"role": "user", "content": prompt + "\n\n朗读要求：450-600 字，适合六岁小朋友听，句子短、口语化，多用对话，讲得慢一点，适合小爱音箱直接念出来。"},
 		},
 		"temperature": 1.1,
 		"stream":      false,
@@ -117,11 +117,11 @@ func cleanStory(s string) string {
 		out = append(out, ln)
 	}
 	s = strings.Join(out, "\n")
-	// 小爱朗读别太长，600 字封顶，尽量在句号处断开
+	// 小爱朗读别太长：1200 字封顶（约 5-6 分钟），尽量在句号处断开
 	r := []rune(s)
-	if len(r) > 600 {
-		cut := 600
-		for i := 599; i > 300; i-- {
+	if len(r) > 1200 {
+		cut := 1200
+		for i := 1199; i > 600; i-- {
 			if r[i] == '。' || r[i] == '！' || r[i] == '？' || r[i] == '\n' {
 				cut = i + 1
 				break

@@ -569,22 +569,30 @@ async function loadClassics() {
   try {
     const r = await api("/api/classics");
     const items = (r && r.items) || [];
-    $("classicPick").innerHTML = items.length
-      ? `<option value="">（选一篇…）</option>` + items.map((i) => `<option value="${esc(i.name)}">${esc(i.name)}（${i.chars} 字）</option>`).join("")
-      : `<option value="">（故事集是空的）</option>`;
+    if (!items.length) { $("classicPick").innerHTML = `<option value="">（故事集是空的）</option>`; return; }
+    const groups = {};
+    for (const i of items) (groups[i.category] = groups[i.category] || []).push(i);
+    let html = `<option value="">（选一篇…）</option>`;
+    for (const cat of Object.keys(groups).sort()) {
+      html += `<optgroup label="${esc(cat)}">`;
+      for (const i of groups[cat]) html += `<option value="${esc(cat)}|${esc(i.name)}">${esc(i.name)}（${i.chars} 字）</option>`;
+      html += `</optgroup>`;
+    }
+    $("classicPick").innerHTML = html;
   } catch (e) { /* 故事集读不到不影响其他功能 */ }
 }
 
 $("classicPick").onchange = async () => {
-  const name = $("classicPick").value;
-  if (!name) return;
+  const val = $("classicPick").value;
+  if (!val) return;
+  const [category, name] = val.split("|");
   try {
-    const r = await api("/api/classic", {name});
+    const r = await api("/api/classic", {category, name});
     if (!r.ok) { toast(r.error || "读不到这篇", true); return; }
     storyText = r.text;
     $("storyBox").style.display = "block";
     $("storyText").textContent = storyText;
-    $("storyMeta").textContent = "经典故事 · " + r.chars + " 字";
+    $("storyMeta").textContent = category + " · " + r.chars + " 字";
     toast("已选《" + name + "》，点「让小爱讲」");
   } catch (e) { toast(e.message, true); }
 };
