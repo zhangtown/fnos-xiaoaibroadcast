@@ -758,6 +758,7 @@ function speechStatus() {
   const engine = $("speechEngine").value || sp.engine || "";
   const parts = [];
   if (sp.engine) parts.push("当前已保存：" + ({ "": "小爱自带", openai: "OpenAI 兼容", qwen: "百炼 Qwen", tencent: "腾讯云" }[sp.engine] || sp.engine));
+  else parts.push("当前已保存：小爱自带（还没保存合成引擎，讲故事会用小爱的声音）");
   if (sp.hasKey) parts.push("Key " + (sp.keyMask || "已保存"));
   if (sp.hasSecret) parts.push("SecretId 已保存");
   if (sp.voice) parts.push("音色 " + sp.voice);
@@ -882,7 +883,12 @@ $("storySpeakBtn").onclick = async () => {
   btn.disabled = true; btn.textContent = "发送中…";
   try {
     const r = await api("/api/story/speak", {text: storyText});
-    toast(r.ok ? "正在念，听一下音箱" : (r.error || "失败"), !r.ok);
+    if (r.ok) {
+      const label = { qwen: "百炼合成", tencent: "腾讯云合成", openai: "OpenAI 兼容合成" }[r.path] || "小爱自带";
+      toast("正在念（" + label + (r.voice ? " · " + r.voice : "") + "）");
+    } else {
+      toast(r.error || "失败", true);
+    }
     await loadState();
   } catch (e) { toast(e.message, true); }
   finally { btn.disabled = false; btn.textContent = "让小爱讲"; }

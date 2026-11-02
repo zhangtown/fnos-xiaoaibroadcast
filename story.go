@@ -165,13 +165,17 @@ func (a *App) handleStorySpeak(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]any{"ok": false, "error": "还没有故事内容"})
 		return
 	}
-	if err := a.speak(cfg, text); err != nil {
+	path := "xiaomi"
+	if cfg.Speech.Engine != "" {
+		path = cfg.Speech.Engine
+	}
+	if err := a.speakStory(cfg, text); err != nil {
 		a.store.AddLog("故事", text, false, err.Error())
-		writeJSON(w, 200, map[string]any{"ok": false, "error": err.Error()})
+		writeJSON(w, 200, map[string]any{"ok": false, "error": err.Error(), "path": path})
 		return
 	}
-	a.store.AddLog("故事", text, true, fmt.Sprintf("已讲（%d 字）", len([]rune(text))))
-	writeJSON(w, 200, map[string]any{"ok": true})
+	a.store.AddLog("故事", text, true, fmt.Sprintf("已讲（%d 字 · %s）", len([]rune(text)), path))
+	writeJSON(w, 200, map[string]any{"ok": true, "path": path, "voice": cfg.Speech.Voice})
 }
 
 // handleLLM 保存大模型设置。
