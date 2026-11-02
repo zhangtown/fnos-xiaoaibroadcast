@@ -1,5 +1,5 @@
 appname=xiaoai-broadcast
-version=2.17.0
+version=2.17.1
 desc=到点让小爱说句话；另有音乐卡片（NAS 曲库播放）和故事卡片（大模型现编童话再让小爱念）。设置卡片里放大模型、曲库音源、票据同步。飞牛统一网关。
 display_name=小爱播报
 maintainer=zhangtown
@@ -10,4 +10,4 @@ source=thirdparty
 os_min_version=1.1.3100
 ctl_stop=true
 install_type=root
-changelog=2.17.0：流式播放转正（实测小爱支持渐进播放）——点「让小爱讲」即开口，不再等整篇合成；边播边把音频写进缓存，重播不再花额度；设置里可选「流式 / 文件」两种方式。2.16.3：流式实验开关。
+changelog=2.17.1：音乐卡片加搜索框——输入歌名/文件夹名即时出结果（300ms 防抖、按名字命中优先），点一条或回车直接播放；索引缓存在内存，5 分钟或点刷新重建。2.17.0：流式播放转正。

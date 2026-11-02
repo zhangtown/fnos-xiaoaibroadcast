@@ -35,6 +35,7 @@ type App struct {
 	usage    *usageStore
 	prewarm  prewarmState
 	musicErr string // 音源端口绑定失败的原因（端口被占、权限不足等）
+	idx      searchIndex
 }
 
 func main() {
@@ -73,6 +74,7 @@ func main() {
 	mux.HandleFunc("/api/music/folders", app.handleMusicFolders)
 	mux.HandleFunc("/api/music/folder", app.handleMusicFolder)
 	mux.HandleFunc("/api/music/settings", app.handleMusicSettings)
+	mux.HandleFunc("/api/music/search", app.handleMusicSearch)
 	mux.HandleFunc("/api/story/generate", app.handleStoryGenerate)
 	mux.HandleFunc("/api/story/speak", app.handleStorySpeak)
 	mux.HandleFunc("/api/classics", app.handleClassics)

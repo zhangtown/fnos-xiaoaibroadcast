@@ -123,7 +123,14 @@
   </header>
 
   <section class="card">
-    <h2>音乐 <span class="hint">选文件夹 → 选歌 → 播放</span></h2>
+    <h2>音乐 <span class="hint">搜歌，或选文件夹 → 选歌 → 播放</span></h2>
+    <div class="row">
+      <div class="grow" style="flex:1 1 360px">
+        <label class="lbl">搜索歌曲（名字或文件夹名，回车播放第一首）</label>
+        <input type="text" id="musicSearch" placeholder="输入歌名，比如 晴天 / 周深 / 助眠" autocomplete="off" />
+      </div>
+    </div>
+    <div id="searchResults" class="logs" style="max-height:220px;margin-top:10px;display:none"></div>
     <div class="row">
       <div class="grow">
         <label class="lbl">音频文件夹</label>
@@ -963,6 +970,67 @@ $("saveBtn").onclick = async () => {
   await loadState();
 };
 
+// ---- 曲库搜索 ----
+let searchSeq = 0;
+let searchTimer = null;
+let searchItems = [];
+
+function renderSearchResults(items, total, q) {
+  searchItems = items;
+  const box = $("searchResults");
+  if (!q) { box.style.display = "none"; box.innerHTML = ""; return; }
+  box.style.display = "block";
+  if (!items.length) {
+    box.innerHTML = `<div class="h" style="padding:8px 10px;color:var(--muted)">没找到「${esc(q)}」</div>`;
+    return;
+  }
+  box.innerHTML = items.map((m, i) =>
+    `<div class="log" style="cursor:pointer" data-idx="${i}">
+       <div class="grow"><div class="t">${esc(m.name)}</div>
+       <div class="d">${esc(m.folder || "根目录")}</div></div>
+       <div class="s">播放</div>
+     </div>`).join("")
+    + `<div class="h" style="padding:6px 10px;color:var(--muted)">共 ${total} 条${total > items.length ? "，只显示前 " + items.length + " 条" : ""}</div>`;
+}
+
+async function doSearch() {
+  const q = $("musicSearch").value.trim();
+  const seq = ++searchSeq;
+  if (!q) { renderSearchResults([], 0, ""); return; }
+  try {
+    const r = await api("/api/music/search?q=" + encodeURIComponent(q));
+    if (seq !== searchSeq) return; // 有更新的一次搜索了
+    renderSearchResults(r.items || [], r.total || 0, q);
+  } catch (e) {
+    if (seq === searchSeq) renderSearchResults([], 0, q);
+  }
+}
+
+$("musicSearch").addEventListener("input", () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(doSearch, 300);
+});
+
+$("musicSearch").addEventListener("keydown", async (e) => {
+  if (e.key !== "Enter") return;
+  clearTimeout(searchTimer);
+  await doSearch();
+  if (searchItems[0]) playSearchItem(0);
+});
+
+async function playSearchItem(idx) {
+  const m = searchItems[idx];
+  if (!m || !m.url) { toast("这首歌没有可播放地址", true); return; }
+  const r = await api("/api/play", {url: m.url});
+  toast(r.ok ? "正在播放：" + m.name : (r.error || "播放失败"), !r.ok);
+  await loadState();
+}
+
+$("searchResults").addEventListener("click", (e) => {
+  const row = e.target.closest("[data-idx]");
+  if (!row) return;
+  playSearchItem(Number(row.dataset.idx));
+});
 $("playBtn").onclick = async () => {
   const url = $("musicPick").value;
   if (!url) { toast("先在曲库里选一首", true); return; }

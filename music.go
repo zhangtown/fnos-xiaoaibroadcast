@@ -88,6 +88,14 @@ func (m MusicLib) publicBase() string {
 }
 
 // rootOf 找出某个文件夹属于哪个根目录，以及它到根目录的相对路径。
+// musicURL 拼出音箱能取的音频地址（搜索索引也用它，保持一致）。
+func musicURL(base, token string, rootIdx int, relSlash string) string {
+	if base == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s/m/%s/%d/%s", base, token, rootIdx, (&url.URL{Path: relSlash}).EscapedPath())
+}
+
 func rootOf(dirs []string, folder string) (int, string, bool) {
 	for i, d := range dirs {
 		if folder == d || strings.HasPrefix(folder, d+string(os.PathSeparator)) {
