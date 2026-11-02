@@ -1,5 +1,5 @@
 appname=xiaoai-broadcast
-version=2.15.8
+version=2.15.9
 desc=到点让小爱说句话；另有音乐卡片（NAS 曲库播放）和故事卡片（大模型现编童话再让小爱念）。设置卡片里放大模型、曲库音源、票据同步。飞牛统一网关。
 display_name=小爱播报
 maintainer=zhangtown
@@ -10,4 +10,4 @@ source=thirdparty
 os_min_version=1.1.3100
 ctl_stop=true
 install_type=root
-changelog=2.15.8：默认音源端口 18090→18095（18090 被 1Panel 占用，老配置自动迁移）；端口绑定失败会在设置里直接显示原因，不再是「静默不通」。2.15.7：外链模式文件名前缀。
+changelog=2.15.9：修两处——「让小爱讲」改走合成引擎（之前仍走小爱自带，所以音色不对）；合成播放会在估算时长后自动停一次，避免小米音箱单曲循环一直重复。2.15.8：端口 18095。

@@ -292,7 +292,7 @@ func (a *App) handleTest(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(in.Text) == "" {
 		in.Text = "测试一下，我是小爱播报。"
 	}
-	err := a.speak(cfg, in.Text)
+	err := a.speakStory(cfg, in.Text)
 	if err != nil {
 		a.store.AddLog("试播", in.Text, false, err.Error())
 		writeJSON(w, 200, map[string]any{"ok": false, "error": err.Error()})

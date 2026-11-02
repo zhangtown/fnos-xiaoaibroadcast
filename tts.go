@@ -303,12 +303,32 @@ func (a *App) ttsHandler() http.Handler {
 	})
 }
 
+// playOnce 放一段「已知文本」的音频，并在估算时长后主动停一次。
+// 小米音箱用 player_play_music 放单条音频时常常单曲循环，不主动停会一直重复。
+func (a *App) playOnce(url, text string) error {
+	if err := a.xm.PlayURL(url, 0); err != nil {
+		return err
+	}
+	secs := len([]rune(text))*32/100 + 3 // 中文约 3 字/秒，再留 3 秒余量
+	if secs < 5 {
+		secs = 5
+	}
+	if secs > 900 {
+		secs = 900
+	}
+	go func() {
+		time.Sleep(time.Duration(secs) * time.Second)
+		_ = a.xm.StopPlaying()
+	}()
+	return nil
+}
+
 // speakStory 讲故事专用：选了合成引擎就先合成再放，失败退回小爱朗读。
 func (a *App) speakStory(cfg Config, text string) error {
 	if cfg.Speech.Engine != "" {
 		url, err := a.synthToFile(cfg, text, cfg.Speech.Voice)
 		if err == nil {
-			err = a.xm.PlayURL(url, 0)
+			err = a.playOnce(url, text)
 		}
 		if err == nil {
 			a.store.AddLog("故事", text, true, "合成播放（"+voiceLabel(cfg.Speech.Voice)+"）")
@@ -499,7 +519,7 @@ func (a *App) handleSpeechTest(w http.ResponseWriter, r *http.Request) {
 	// 自检：让 NAS 自己取一遍这个地址。取不到说明是「音源口/地址」的问题；
 	// 取得到但音箱放不出，就是音箱到 NAS 这段网络的问题。
 	selfOK, selfMsg := probeURL(url)
-	if err := a.xm.PlayURL(url, 0); err != nil {
+	if err := a.playOnce(url, text); err != nil {
 		writeJSON(w, 200, map[string]any{"ok": false, "error": err.Error(), "url": url, "selfCheck": selfMsg})
 		return
 	}
