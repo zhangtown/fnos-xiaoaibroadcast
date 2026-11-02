@@ -71,6 +71,11 @@ var openaiVoices = []edgeVoice{
 var ttsHTTP = &http.Client{Timeout: 240 * time.Second}
 
 func voiceLabel(id string) string {
+	for _, v := range qwenVoices {
+		if v.ID == id {
+			return v.Label
+		}
+	}
 	for _, v := range tencentVoices {
 		if v.ID == id {
 			return v.Label
@@ -423,6 +428,8 @@ func (a *App) synthToFile(cfg Config, text, voice string) (string, error) {
 			mp3, err = openaiSynth(cfg, text, voice)
 		case "tencent":
 			mp3, err = tencentSynth(cfg, text, voice)
+		case "qwen":
+			mp3, err = qwenSynth(cfg, text, voice)
 		default:
 			mp3, err = edgeSynth(text, voice)
 		}
@@ -465,7 +472,7 @@ func (a *App) ttsHandler() http.Handler {
 
 // speakStory 讲故事专用：开了合成引擎就先合成再放，失败退回小爱朗读。
 func (a *App) speakStory(cfg Config, text string) error {
-	if cfg.Speech.Engine == "openai" || cfg.Speech.Engine == "edge" || cfg.Speech.Engine == "tencent" {
+	if cfg.Speech.Engine == "openai" || cfg.Speech.Engine == "edge" || cfg.Speech.Engine == "tencent" || cfg.Speech.Engine == "qwen" {
 		url, err := a.synthToFile(cfg, text, cfg.Speech.Voice)
 		if err == nil {
 			err = a.xm.PlayURL(url, 0)
@@ -487,7 +494,7 @@ func (a *App) handleSpeechSave(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &in) {
 		return
 	}
-	if in.Engine != "edge" && in.Engine != "openai" && in.Engine != "tencent" {
+	if in.Engine != "edge" && in.Engine != "openai" && in.Engine != "tencent" && in.Engine != "qwen" {
 		in.Engine = ""
 	}
 	list := edgeVoices
@@ -496,6 +503,8 @@ func (a *App) handleSpeechSave(w http.ResponseWriter, r *http.Request) {
 		list = openaiVoices
 	case "tencent":
 		list = tencentVoices
+	case "qwen":
+		list = qwenVoices
 	}
 	ok := false
 	for _, v := range list {
@@ -541,7 +550,7 @@ func (a *App) handleSpeechTest(w http.ResponseWriter, r *http.Request) {
 	}
 	cfg := a.store.Get()
 	engine := in.Engine
-	if engine != "openai" && engine != "edge" && engine != "tencent" {
+	if engine != "openai" && engine != "edge" && engine != "tencent" && engine != "qwen" {
 		engine = cfg.Speech.Engine
 	}
 	if engine == "" {

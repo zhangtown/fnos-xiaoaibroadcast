@@ -251,6 +251,7 @@
         <select id="speechEngine">
           <option value="">小爱自带（稳）</option>
           <option value="openai">OpenAI 兼容语音（用大模型的地址和 Key）</option>
+          <option value="qwen">阿里云百炼 Qwen-Audio-TTS（推荐）</option>
           <option value="tencent">腾讯云语音合成（需 SecretId/SecretKey）</option>
           <option value="edge">Edge TTS（微软，多数网络会被拒）</option>
         </select>
@@ -264,9 +265,9 @@
       <button class="btn primary" id="speechSave">保存</button>
     </div>
     <div class="row" id="speechApiRow" style="margin-top:10px;display:none">
-      <div class="grow"><label class="lbl">语音接口地址（留空用大模型的）</label><input type="text" id="speechBase" placeholder="https://api.siliconflow.cn/v1" /></div>
-      <div class="grow" style="flex:0 1 190px"><label class="lbl">模型</label><input type="text" id="speechModel" placeholder="tts-1" /></div>
-      <div class="grow"><label class="lbl">Key（留空用大模型的）</label><input type="password" id="speechKey" placeholder="留空表示不修改" autocomplete="off" /></div>
+      <div class="grow"><label class="lbl">接口地址（留空=默认）</label><input type="text" id="speechBase" placeholder="wss://dashscope.aliyuncs.com/api-ws/v1/inference" /></div>
+      <div class="grow" style="flex:0 1 210px"><label class="lbl">模型</label><input type="text" id="speechModel" placeholder="qwen-audio-3.1-tts-flash" /></div>
+      <div class="grow"><label class="lbl">API Key（留空=不修改）</label><input type="password" id="speechKey" placeholder="sk-..." autocomplete="off" /></div>
     </div>
     <div class="row" id="speechTencentRow" style="margin-top:10px;display:none">
       <div class="grow"><label class="lbl">SecretId</label><input type="text" id="speechSid" placeholder="AKID..." autocomplete="off" /></div>
@@ -464,7 +465,7 @@ function renderSettings() {
   $("musicCfgHint").innerHTML = `改端口或目录后需要重启应用才生效。当前音源地址：<code>${esc(state.music.base || "（未探测到）")}</code>`;
 
   const sp = state.speech || {};
-  $("speechEngine").value = ["edge", "openai", "tencent"].includes(sp.engine) ? sp.engine : "";
+  $("speechEngine").value = ["edge", "openai", "tencent", "qwen"].includes(sp.engine) ? sp.engine : "";
   if (document.activeElement !== $("speechBase")) $("speechBase").value = sp.base || "";
   if (document.activeElement !== $("speechModel")) $("speechModel").value = sp.model || "";
   if (document.activeElement !== $("speechRegion")) $("speechRegion").value = sp.region || "";
@@ -596,8 +597,9 @@ function fillSpeechVoices(keep) {
   let voices = state.voices || [];
   if (engine === "openai") voices = state.openaiVoices || [];
   if (engine === "tencent") voices = state.tencentVoices || [];
+  if (engine === "qwen") voices = state.qwenVoices || [];
   $("voiceList").innerHTML = voices.map((v) => `<option value="${esc(v.id)}">${esc(v.label)}</option>`).join("");
-  $("speechApiRow").style.display = engine === "openai" ? "flex" : "none";
+  $("speechApiRow").style.display = (engine === "openai" || engine === "qwen") ? "flex" : "none";
   $("speechTencentRow").style.display = engine === "tencent" ? "flex" : "none";
   if (keep !== undefined) $("speechVoice").value = keep || (voices[0] && voices[0].id) || "";
 }

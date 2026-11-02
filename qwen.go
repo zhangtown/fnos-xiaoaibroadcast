@@ -1,0 +1,226 @@
+// 阿里云百炼 Qwen-Audio-TTS：WebSocket 协议，实时合成。
+//
+// 流程（官方文档的 protocol）：连上 wss → 发 run-task → 等 task-started →
+// 发若干 continue-task（带文本）→ 发 finish-task → 收 binary 帧（音频）→ 收 task-finished。
+//
+// 复用 tts.go 里那个手写的 WebSocket 客户端（wsWrite / wsRead），不引第三方库。
+package main
+
+import (
+	"bufio"
+	"bytes"
+	"crypto/rand"
+	"crypto/tls"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"net/url"
+	"strings"
+	"time"
+)
+
+const (
+	qwenDefaultURL   = "wss://dashscope.aliyuncs.com/api-ws/v1/inference"
+	qwenDefaultModel = "qwen-audio-3.1-tts-flash"
+	qwenDefaultVoice = "longanhuan_v3.1"
+)
+
+// 文档里出现的系统音色；其余可以自己填（音色列表随账号开通情况而变）。
+var qwenVoices = []edgeVoice{
+	{"longanhuan_v3.1", "龙欢 · 女声（文档示例）"},
+	{"longanhuan_v3", "龙欢 v3 · 女声"},
+	{"longshuo_v3", "龙硕 · 男声"},
+	{"loongstella_v3", "Stella · 女声"},
+}
+
+type wsEvent struct {
+	Header struct {
+		Event        string `json:"event"`
+		TaskID       string `json:"task_id"`
+		ErrorCode    string `json:"error_code"`
+		ErrorMessage string `json:"error_message"`
+	} `json:"header"`
+	Payload struct {
+		Output struct {
+			Audio string `json:"audio"`
+		} `json:"output"`
+	} `json:"payload"`
+}
+
+// qwenSynth 合成一段语音，返回 mp3 字节。
+func qwenSynth(cfg Config, text, voice string) ([]byte, error) {
+	key := strings.TrimSpace(cfg.Speech.Key)
+	if key == "" {
+		return nil, fmt.Errorf("还没填阿里云百炼的 API Key（设置 → 故事语音）")
+	}
+	endpoint := strings.TrimSpace(cfg.Speech.Base)
+	if endpoint == "" {
+		endpoint = qwenDefaultURL
+	}
+	endpoint = strings.Replace(endpoint, "https://", "wss://", 1)
+	model := strings.TrimSpace(cfg.Speech.Model)
+	if model == "" {
+		model = qwenDefaultModel
+	}
+	if strings.TrimSpace(voice) == "" {
+		voice = qwenDefaultVoice
+	}
+
+	u, err := url.Parse(endpoint)
+	if err != nil || u.Host == "" {
+		return nil, fmt.Errorf("语音接口地址不对：%s", endpoint)
+	}
+	host := u.Host
+	if !strings.Contains(host, ":") {
+		host += ":443"
+	}
+
+	conn, err := tls.DialWithDialer(&netDialer, "tcp", host, &tls.Config{ServerName: u.Hostname(), MinVersion: tls.VersionTLS12})
+	if err != nil {
+		return nil, fmt.Errorf("连不上百炼（%s）：%v", u.Hostname(), err)
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(150 * time.Second))
+
+	// ---- 握手（带上鉴权头）----
+	var rnd [16]byte
+	_, _ = rand.Read(rnd[:])
+	path := u.RequestURI()
+	if path == "" {
+		path = "/api-ws/v1/inference"
+	}
+	req := "GET " + path + " HTTP/1.1\r\n" +
+		"Host: " + u.Host + "\r\n" +
+		"Upgrade: websocket\r\n" +
+		"Connection: Upgrade\r\n" +
+		"Sec-WebSocket-Key: " + base64.StdEncoding.EncodeToString(rnd[:]) + "\r\n" +
+		"Sec-WebSocket-Version: 13\r\n" +
+		"Authorization: bearer " + key + "\r\n" +
+		"X-DashScope-DataInspection: enable\r\n" +
+		"User-Agent: xiaoai-broadcast/1.0\r\n\r\n"
+	if _, err := conn.Write([]byte(req)); err != nil {
+		return nil, fmt.Errorf("握手发送失败：%v", err)
+	}
+	br := bufio.NewReaderSize(conn, 64*1024)
+	status, err := br.ReadString('\n')
+	if err != nil {
+		return nil, fmt.Errorf("握手无响应：%v", err)
+	}
+	if !strings.Contains(status, "101") {
+		detail := ""
+		for i := 0; i < 10; i++ {
+			line, err := br.ReadString('\n')
+			if err != nil || strings.TrimSpace(line) == "" {
+				break
+			}
+			if strings.Contains(strings.ToLower(line), "www-authenticate") || strings.Contains(strings.ToLower(line), "x-dashscope") {
+				detail += strings.TrimSpace(line) + " "
+			}
+		}
+		return nil, fmt.Errorf("百炼拒绝了连接（%s）%s", strings.TrimSpace(status), detail)
+	}
+	for {
+		line, err := br.ReadString('\n')
+		if err != nil {
+			return nil, fmt.Errorf("握手响应不完整：%v", err)
+		}
+		if strings.TrimSpace(line) == "" {
+			break
+		}
+	}
+
+	taskID := requestID()
+
+	// ---- run-task ----
+	runTask := map[string]any{
+		"header": map[string]any{"action": "run-task", "task_id": taskID, "streaming": "duplex"},
+		"payload": map[string]any{
+			"task_group": "audio",
+			"task":       "tts",
+			"function":   "SpeechSynthesizer",
+			"model":      model,
+			"parameters": map[string]any{
+				"text_type":   "PlainText",
+				"voice":       voice,
+				"format":      "mp3",
+				"sample_rate": 22050,
+				"volume":      50,
+				"rate":        1,
+				"pitch":       1,
+				"enable_ssml": false,
+			},
+			"input": map[string]any{},
+		},
+	}
+	if err := wsWriteJSON(conn, runTask); err != nil {
+		return nil, fmt.Errorf("发送 run-task 失败：%v", err)
+	}
+
+	var audio bytes.Buffer
+	started := false
+	pieces := splitForTTS(text, 300)
+	pieceIdx := 0
+
+	for {
+		op, payload, err := wsRead(br)
+		if err != nil {
+			if audio.Len() > 0 {
+				return audio.Bytes(), nil
+			}
+			return nil, fmt.Errorf("接收失败：%v", err)
+		}
+		switch op {
+		case 0x2: // binary：音频
+			audio.Write(payload)
+		case 0x1: // text：事件
+			var ev wsEvent
+			if json.Unmarshal(payload, &ev) != nil {
+				continue
+			}
+			switch ev.Header.Event {
+			case "task-started":
+				started = true
+				for pieceIdx < len(pieces) {
+					msg := map[string]any{
+						"header":  map[string]any{"action": "continue-task", "task_id": taskID, "streaming": "duplex"},
+						"payload": map[string]any{"input": map[string]any{"text": pieces[pieceIdx]}},
+					}
+					if err := wsWriteJSON(conn, msg); err != nil {
+						return nil, fmt.Errorf("发送 continue-task 失败：%v", err)
+					}
+					pieceIdx++
+				}
+				fin := map[string]any{
+					"header":  map[string]any{"action": "finish-task", "task_id": taskID, "streaming": "duplex"},
+					"payload": map[string]any{"input": map[string]any{}},
+				}
+				if err := wsWriteJSON(conn, fin); err != nil {
+					return nil, fmt.Errorf("发送 finish-task 失败：%v", err)
+				}
+			case "task-finished":
+				if audio.Len() == 0 {
+					return nil, fmt.Errorf("百炼没有返回音频")
+				}
+				return audio.Bytes(), nil
+			case "task-failed":
+				return nil, fmt.Errorf("百炼合成失败（%s）：%s", ev.Header.ErrorCode, ev.Header.ErrorMessage)
+			}
+		case 0x8:
+			if audio.Len() > 0 {
+				return audio.Bytes(), nil
+			}
+			if !started {
+				return nil, fmt.Errorf("连接被关闭（没有收到 task-started）")
+			}
+			return nil, fmt.Errorf("连接被关闭，没有音频返回")
+		}
+	}
+}
+
+func wsWriteJSON(w interface{ Write([]byte) (int, error) }, v any) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	return wsWrite(w, 0x1, b)
+}
