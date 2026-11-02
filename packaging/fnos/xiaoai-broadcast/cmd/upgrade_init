@@ -1,0 +1,3 @@
+#!/bin/sh
+# upgrade_init：小爱播报不做额外处理（数据在 $TRIM_PKGVAR，升级/重装都保留）。
+exit 0

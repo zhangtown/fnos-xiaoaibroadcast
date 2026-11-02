@@ -1,0 +1,13 @@
+appname=xiaoai-broadcast
+version=2.7.2
+desc=到点让小爱说句话；另有音乐卡片（NAS 曲库播放）和故事卡片（大模型现编童话再让小爱念）。设置卡片里放大模型、曲库音源、票据同步。飞牛统一网关。
+display_name=小爱播报
+maintainer=zhangtown
+platform=x86
+desktop_uidir=ui
+desktop_applaunchname=xiaoai-broadcast.main
+source=thirdparty
+os_min_version=1.1.3100
+ctl_stop=true
+install_type=root
+changelog=2.7.2：源码里不再带任何本机痕迹——示例地址改成 192.168.1.10，打包脚本改为从 GO_EXE/PATH 找 go（原来写死了本机路径）。功能无变化。2.7.1：故事生成参数与用时。2.7.0：故事两步。2.6.x：设置卡片与布局。

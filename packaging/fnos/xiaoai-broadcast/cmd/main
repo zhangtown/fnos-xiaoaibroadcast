@@ -1,0 +1,104 @@
+#!/bin/sh
+# 小爱播报 —— fnOS 生命周期入口。
+# 进程只监听 unix socket（$TRIM_APPDEST/app.sock），由飞牛统一网关
+# 反代到 /app/xiaoai-broadcast，不额外占用端口。
+#
+# 数据（配置、票据、执行记录）放在 $TRIM_PKGVAR，升级不会覆盖。
+
+LOG_FILE="${TRIM_PKGVAR}/app.log"
+PID_FILE="${TRIM_PKGVAR}/app.pid"
+BIN="${TRIM_APPDEST}/bin/xiaoai-broadcast"
+SOCKET_PATH="${TRIM_APPDEST}/app.sock"
+GATEWAY_PREFIX="/app/xiaoai-broadcast"
+export TZ=Asia/Shanghai
+
+log_msg() {
+  echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"
+}
+
+check_process() {
+  kill -0 "$1" 2>/dev/null
+}
+
+status_app() {
+  if [ -f "$PID_FILE" ]; then
+    pid="$(head -n 1 "$PID_FILE" | tr -d '[:space:]')"
+    if [ -n "$pid" ] && check_process "$pid"; then
+      return 0
+    fi
+    rm -f "$PID_FILE"
+  fi
+  return 1
+}
+
+start_app() {
+  if status_app; then
+    return 0
+  fi
+  mkdir -p "$TRIM_PKGVAR"
+  log_msg "Starting xiaoai-broadcast..."
+  rm -f "$SOCKET_PATH"
+  GATEWAY_PREFIX="$GATEWAY_PREFIX" SOCKET_PATH="$SOCKET_PATH" \
+    "$BIN" >> "$LOG_FILE" 2>&1 &
+  echo "$!" > "$PID_FILE"
+  # 等 socket 出现，网关要靠它注册
+  i=0
+  while [ ! -S "$SOCKET_PATH" ] && [ "$i" -lt 50 ]; do
+    i=$((i + 1))
+    sleep 0.2
+  done
+  if [ ! -S "$SOCKET_PATH" ]; then
+    log_msg "ERROR: socket not created"
+    exit 1
+  fi
+  chmod 666 "$SOCKET_PATH"
+  log_msg "Started (pid $(cat "$PID_FILE"))"
+}
+
+stop_app() {
+  log_msg "Stopping xiaoai-broadcast..."
+  if [ ! -f "$PID_FILE" ]; then
+    rm -f "$SOCKET_PATH"
+    return 0
+  fi
+  pid="$(head -n 1 "$PID_FILE" | tr -d '[:space:]')"
+  if [ -z "$pid" ] || ! check_process "$pid"; then
+    rm -f "$PID_FILE"
+    rm -f "$SOCKET_PATH"
+    return 0
+  fi
+  kill -TERM "$pid" 2>> "$LOG_FILE" || true
+  count=0
+  while check_process "$pid" && [ "$count" -lt 10 ]; do
+    sleep 1
+    count=$((count + 1))
+  done
+  if check_process "$pid"; then
+    kill -KILL "$pid" 2>> "$LOG_FILE" || true
+  fi
+  rm -f "$PID_FILE"
+  rm -f "$SOCKET_PATH"
+}
+
+case "$1" in
+  start)
+    start_app
+    ;;
+  stop)
+    stop_app
+    ;;
+  restart)
+    stop_app
+    start_app
+    ;;
+  status)
+    if status_app; then
+      exit 0
+    fi
+    exit 3
+    ;;
+  *)
+    echo "Unknown command: $1" > "$TRIM_TEMP_LOGFILE"
+    exit 1
+    ;;
+esac

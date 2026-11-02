@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>小爱播报</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23FF6B3D'/%3E%3Cpath d='M12 13h3l5-4v14l-5-4h-3z' fill='%23fff'/%3E%3C/svg%3E" />
+<style>
+  :root{
+    --bg:#f6f4f1; --card:#ffffff; --ink:#1d1c1a; --muted:#726d66; --line:#e8e3db;
+    --accent:#ff6b3d; --accent-ink:#fff; --accent-soft:#fff2ec;
+    --ok:#2f9e6b; --bad:#d9503f; --shadow:0 1px 2px rgba(29,28,26,.05),0 8px 24px -12px rgba(29,28,26,.18);
+    --radius:16px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#141312; --card:#1e1d1b; --ink:#f2efe9; --muted:#a8a29a; --line:#2f2d2a;
+           --accent:#ff7a4d; --accent-soft:#2a1c15; --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 30px -16px rgba(0,0,0,.8); }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--ink); -webkit-font-smoothing:antialiased;
+    font:15px/1.6 -apple-system,BlinkMacSystemFont,"SF Pro SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    padding:0 16px calc(48px + env(safe-area-inset-bottom));
+  }
+  .wrap{max-width:840px;margin:0 auto}
+  header{display:flex;align-items:center;gap:12px;padding:22px 2px 14px}
+  .logo{width:34px;height:34px;border-radius:10px;background:linear-gradient(150deg,#ff8a4d,#ff5f2e);
+    display:grid;place-items:center;box-shadow:0 6px 16px -8px rgba(255,95,46,.9);flex:0 0 auto}
+  .logo svg{width:19px;height:19px;fill:#fff}
+  h1{font-size:19px;margin:0;letter-spacing:.2px;font-weight:650}
+  .sub{color:var(--muted);font-size:12.5px;margin-top:-2px}
+  .badge{margin-left:auto;font-size:12.5px;padding:5px 11px;border-radius:999px;background:var(--card);
+    border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+  .badge.on{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 35%,var(--line))}
+  .badge.off{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 35%,var(--line))}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);
+    padding:18px;margin:14px 0}
+  .card h2{font-size:14px;margin:0 0 14px;font-weight:650;letter-spacing:.3px;display:flex;align-items:center;gap:8px}
+  .card h2 .hint{font-weight:400;color:var(--muted);font-size:12.5px;letter-spacing:0}
+  .next{display:flex;flex-wrap:wrap;gap:10px}
+  .next .item{flex:1 1 210px;background:var(--accent-soft);border-radius:12px;padding:11px 13px;
+    border:1px solid color-mix(in srgb,var(--accent) 16%,transparent)}
+  .next .t{font-variant-numeric:tabular-nums;font-weight:650;font-size:15px;color:var(--accent)}
+  .next .x{font-size:12.5px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .next .hero .x{color:var(--ink);font-size:13.5px}
+  .empty{color:var(--muted);font-size:13px;padding:6px 0}
+  .srow{display:grid;grid-template-columns:112px 1fr 44px;gap:12px;align-items:start;padding:14px 0;border-top:1px dashed var(--line)}
+  .srow:first-of-type{border-top:0;padding-top:0}
+  input[type=time],input[type=text],input[type=password],input[type=number],select,textarea{
+    font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;
+    padding:8px 10px;width:100%;outline:none;transition:border-color .15s, box-shadow .15s}
+  input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 16%,transparent)}
+  input[type=time]{font-variant-numeric:tabular-nums;font-weight:600;padding:8px 6px;min-width:0}
+  input[type=range]{width:100%;accent-color:var(--accent);background:transparent;border:0;padding:0;height:30px}
+  textarea{resize:vertical;min-height:56px;line-height:1.55}
+  .days{display:flex;align-items:center;gap:5px;margin-top:7px;flex-wrap:wrap}
+  .del{color:var(--bad);cursor:pointer;font-size:12.5px;white-space:nowrap;margin-left:auto;padding-left:8px}
+  .day{font-size:12px;padding:3px 8px;border-radius:999px;border:1px solid var(--line);background:transparent;
+    color:var(--muted);cursor:pointer;user-select:none;line-height:1.35}
+  .day.sel{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+  .switch{position:relative;width:40px;height:23px;flex:0 0 auto;cursor:pointer}
+  .switch input{position:absolute;opacity:0;width:0;height:0}
+  .switch span{position:absolute;inset:0;background:var(--line);border-radius:999px;transition:background .18s}
+  .switch span:after{content:"";position:absolute;width:17px;height:17px;left:3px;top:3px;background:#fff;
+    border-radius:50%;transition:transform .18s;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+  .switch input:checked + span{background:var(--accent)}
+  .switch input:checked + span:after{transform:translateX(17px)}
+  .btn{font:inherit;font-weight:560;border-radius:10px;border:1px solid var(--line);background:var(--card);
+    color:var(--ink);padding:9px 15px;cursor:pointer;transition:transform .06s,background .15s,border-color .15s;white-space:nowrap}
+  .btn:hover{border-color:color-mix(in srgb,var(--accent) 40%,var(--line))}
+  .btn:active{transform:translateY(1px)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+  .btn.primary:hover{filter:brightness(1.04)}
+  .btn.ghost{background:transparent}
+  .btn:disabled{opacity:.55;cursor:default}
+  .row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
+  .row > .grow{flex:1 1 200px;min-width:0}
+  label.lbl{display:block;font-size:12.5px;color:var(--muted);margin:0 0 5px}
+  .logs{max-height:270px;overflow:auto;margin:0 -4px}
+  .log{display:flex;gap:9px;padding:7px 4px;border-bottom:1px dashed var(--line);font-size:13px;align-items:baseline}
+  .log:last-child{border-bottom:0}
+  .dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto;margin-top:6px}
+  .dot.ok{background:var(--ok)} .dot.bad{background:var(--bad)}
+  .log time{color:var(--muted);font-variant-numeric:tabular-nums;font-size:12px;flex:0 0 auto}
+  .log .m{color:var(--muted);font-size:12.5px}
+  .log .txt{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,20px);background:#1d1c1a;color:#fff;
+    padding:10px 16px;border-radius:999px;font-size:13.5px;opacity:0;pointer-events:none;transition:.2s;z-index:9;max-width:90vw;text-align:center}
+  .toast.show{opacity:1;transform:translate(-50%,0)}
+  .toast.bad{background:var(--bad)}
+  .tip{font-size:12.5px;color:var(--muted);margin-top:10px;line-height:1.65}
+  .tip b{color:var(--ink);font-weight:600}
+  code{background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:1px 5px;font-size:12px}
+  .sep{height:1px;background:var(--line);margin:16px 0}
+  .storytext{white-space:pre-wrap;line-height:1.75;font-size:14px;max-height:320px;overflow:auto;
+    background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px}
+  .volrow{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .volrow .lbl{margin:0;white-space:nowrap}
+  .volrow input[type=range]{max-width:300px}
+  .volrow .h{white-space:nowrap}
+  @media (max-width:560px){
+    .srow{grid-template-columns:98px 1fr 40px;gap:10px}
+    header{padding-top:16px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo"><svg viewBox="0 0 24 24"><path d="M4 9h3l5-4v14l-5-4H4zM16.5 8.2a5 5 0 0 1 0 7.6l-.9-1.2a3.4 3.4 0 0 0 0-5.2z"/></svg></div>
+    <div>
+      <h1>小爱播报</h1>
+      <div class="sub">到点让小爱说句话、放首歌，或讲个故事</div>
+    </div>
+    <div id="badge" class="badge">读取中…</div>
+  </header>
+
+  <section class="card">
+    <h2>音乐 <span class="hint">选文件夹 → 选歌 → 播放</span></h2>
+    <div class="row">
+      <div class="grow">
+        <label class="lbl">音频文件夹</label>
+        <select id="folderPick"><option value="">（加载中…）</option></select>
+      </div>
+      <div class="grow">
+        <label class="lbl">曲库</label>
+        <select id="musicPick"><option value="">（先选文件夹）</option></select>
+      </div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn primary" id="playBtn">播放</button>
+      <button class="btn" id="stopBtn">停止</button>
+      <button class="btn ghost" id="musicReload">刷新</button>
+    </div>
+    <div class="tip" id="musicHint"></div>
+  </section>
+  <datalist id="modelList"></datalist>
+
+  <section class="card">
+    <h2>音箱 <span class="hint" id="devHint"></span></h2>
+    <div class="row">
+      <div class="grow"><label class="lbl">播报的音箱</label><select id="deviceSel"><option value="">（还没拉设备）</option></select></div>
+      <button class="btn" id="reloadDev">刷新设备</button>
+    </div>
+    <div class="sep"></div>
+    <div class="volrow">
+      <label class="lbl">音箱音量 <b id="volVal">–</b></label>
+      <input type="range" id="volume" min="0" max="100" step="1" value="0" />
+      <span class="h" style="font-size:12px;color:var(--muted)">拖动即时生效</span>
+    </div>
+    <div class="sep"></div>
+    <div class="row">
+      <div class="grow">
+        <label class="lbl">试一句话（会立刻出声）</label>
+        <input type="text" id="testText" value="测试一下，我是小爱播报。" />
+      </div>
+      <button class="btn" id="testBtn">说话</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>播报表 <span class="hint">只做定时播报</span></h2>
+    <div id="schedules"></div>
+    <div class="row" style="margin-top:14px">
+      <button class="btn ghost" id="addBtn">＋ 加一条</button>
+      <button class="btn primary" id="saveBtn" disabled>保存播报表</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>故事 <span class="hint">先生成，满意了再让小爱讲</span></h2>
+    <div class="row">
+      <div class="grow">
+        <label class="lbl">提示词（可留空，留空就随便讲一个童话）</label>
+        <input type="text" id="storyPrompt" placeholder="比如：讲一个小熊不肯刷牙的故事" />
+      </div>
+      <button class="btn primary" id="storyGenBtn">生成故事</button>
+    </div>
+    <div id="storyBox" style="display:none">
+      <div class="sep"></div>
+      <div class="storytext" id="storyText"></div>
+      <div class="row" style="margin-top:10px;align-items:center">
+        <button class="btn" id="storyRegen">重新生成</button>
+        <button class="btn primary" id="storySpeakBtn">让小爱讲</button>
+        <span class="h" id="storyMeta" style="font-size:12.5px;color:var(--muted)"></span>
+      </div>
+    </div>
+    <div class="tip" id="storyHint"></div>
+  </section>
+
+  <section class="card">
+    <h2>接下来 <span class="hint" id="nowHint"></span></h2>
+    <div class="next" id="next"><div class="empty">还没有启用的播报</div></div>
+  </section>
+
+  <section class="card">
+    <h2>执行记录 <span class="hint">最近 60 条，重启不丢</span></h2>
+    <div class="logs" id="logs"></div>
+  </section>
+
+  <section class="card">
+    <h2>设置</h2>
+
+    <div class="tip" style="margin:0 0 10px"><b>大模型</b>（讲故事用，OpenAI 兼容接口）</div>
+    <div class="row">
+      <div class="grow"><label class="lbl">接口地址</label><input type="text" id="llmBase" placeholder="https://api.deepseek.com/v1" /></div>
+      <div class="grow" style="flex:0 1 180px"><label class="lbl">模型</label><input type="text" id="llmModel" list="modelList" placeholder="deepseek-chat" /></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div class="grow"><label class="lbl">API Key</label><input type="password" id="llmKey" placeholder="留空表示不修改" autocomplete="off" /></div>
+      <button class="btn" id="llmTest">测试连接</button>
+      <button class="btn primary" id="llmSave">保存</button>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div class="grow" style="flex:0 1 150px"><label class="lbl">输出上限（tokens）</label><input type="number" id="llmMaxTokens" min="0" max="8000" step="100" /></div>
+      <div class="grow" style="flex:0 1 190px">
+        <label class="lbl">思考强度</label>
+        <select id="llmEffort">
+          <option value="">不发送（推荐）</option>
+          <option value="none">none（部分厂商支持）</option>
+          <option value="low">low</option>
+          <option value="medium">medium</option>
+          <option value="high">high</option>
+        </select>
+      </div>
+      <span class="h" style="font-size:12px;color:var(--muted);padding-bottom:9px">推理模型才需要动这里</span>
+    </div>
+    <div class="tip" id="llmHint"></div>
+
+    <div class="sep"></div>
+    <div class="tip" style="margin:0 0 10px"><b>曲库与音源</b>（音箱从这里取歌）</div>
+    <div class="row">
+      <div class="grow"><label class="lbl">音乐目录（一行一个）</label><textarea id="musicDirs" rows="2"></textarea></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div class="grow" style="flex:0 1 150px"><label class="lbl">音源端口</label><input type="number" id="musicPort" min="0" max="65535" /></div>
+      <div class="grow"><label class="lbl">对外地址（可留空，自动探测）</label><input type="text" id="musicBase" placeholder="http://192.168.1.10:18090" /></div>
+      <button class="btn primary" id="musicSave">保存</button>
+    </div>
+    <div class="tip" id="musicCfgHint"></div>
+
+    <div class="sep"></div>
+    <div class="tip" style="margin:0 0 10px"><b>票据</b>（小米登录态，从 NAS 上的 xiaomusic 同步）</div>
+    <div class="row">
+      <button class="btn" id="syncBtn">重新同步票据</button>
+      <span class="h" id="ticketState" style="font-size:12.5px;color:var(--muted)"></span>
+    </div>
+
+    <div class="sep"></div>
+    <div class="tip" id="about"></div>
+  </section>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const BASE = location.pathname.replace(/\/index\.html$/, "").replace(/\/+$/, "");
+const $ = (id) => document.getElementById(id);
+const DAYS = ["一","二","三","四","五","六","日"];
+let state = {schedules: [], devices: [], music: {items: [], folders: []}};
+let dirty = false;
+let volBusy = false, volTimer = null;
+let storyText = "";
+
+async function api(path, body) {
+  const opt = body === undefined ? {} : {
+    method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)
+  };
+  const res = await fetch(BASE + path, opt);
+  let data = null;
+  try { data = await res.json(); } catch (e) { throw new Error("服务返回了非 JSON（HTTP " + res.status + "）"); }
+  return data;
+}
+
+function toast(msg, bad) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.className = "toast show" + (bad ? " bad" : "");
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.className = "toast"; }, bad ? 4200 : 1900);
+}
+
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+}
+
+async function loadState() {
+  const s = await api("/api/state");
+  state = {...state, ...s};
+  render();
+}
+
+function render() {
+  const badge = $("badge");
+  if (!state.ready) { badge.className = "badge off"; badge.textContent = "还没同步票据"; }
+  else if (!state.device || !state.device.did) { badge.className = "badge off"; badge.textContent = "还没选音箱"; }
+  else { badge.className = "badge on"; badge.textContent = "就绪"; }
+
+  $("nowHint").textContent = state.now ? "现在 " + state.now : "";
+  renderNext();
+  renderSchedules();
+  renderDevice();
+  renderSettings();
+  renderStory();
+
+  const logs = state.logs || [];
+  $("logs").innerHTML = logs.length ? logs.map((l) => `
+    <div class="log">
+      <span class="dot ${l.ok ? "ok" : "bad"}"></span>
+      <time>${new Date(l.at * 1000).toLocaleString("zh-CN", {hour12: false, month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit"})}</time>
+      <span class="txt">${l.text ? esc(l.text) : "（系统）"}</span>
+      <span class="m">${esc(l.kind)}${l.msg ? " · " + esc(l.msg) : ""}</span>
+    </div>`).join("") : `<div class="empty">还没有记录</div>`;
+}
+
+function renderNext() {
+  const box = $("next");
+  const nx = state.next || [];
+  if (!nx.length) { box.innerHTML = `<div class="empty">还没有启用的播报</div>`; return; }
+  const head = nx[0];
+  let html = `<div class="item hero" style="flex:1 1 100%">
+      <div class="t">${esc(head.label)}</div>
+      <div class="x">${esc(head.text)}</div>
+      <div class="x">${esc(head.days)} ${esc(head.time)}</div>
+    </div>`;
+  for (const n of nx.slice(1)) {
+    html += `<div class="item" style="flex:1 1 240px;background:transparent;border-color:var(--line)">
+      <div class="t" style="font-size:13px">${esc(n.days)} ${esc(n.time)}</div>
+      <div class="x">${esc(n.text)}</div>
+      <div class="x">下次 ${esc(n.label)}</div>
+    </div>`;
+  }
+  box.innerHTML = html;
+}
+
+function renderSchedules() {
+  const box = $("schedules");
+  const list = state.schedules || [];
+  if (!list.length) { box.innerHTML = `<div class="empty">还没有播报，点下面「加一条」</div>`; return; }
+  box.innerHTML = list.map((s, i) => `
+    <div class="srow" data-i="${i}">
+      <div><input type="time" value="${esc(s.time)}" data-k="time" /></div>
+      <div>
+
+        <textarea data-k="text" rows="2" placeholder="要小爱说的那句话">${esc(s.text)}</textarea>
+        <div class="days">${DAYS.map((d, j) => `<span class="day ${(s.days || []).includes(j + 1) ? "sel" : ""}" data-d="${j + 1}">周${d}</span>`).join("")}<span class="del" data-del="${i}">删除</span></div>
+      </div>
+      <label class="switch" title="启用"><input type="checkbox" data-k="enabled" ${s.enabled ? "checked" : ""}/><span></span></label>
+    </div>`).join("");
+
+  box.querySelectorAll("[data-k]").forEach((el) => {
+    el.addEventListener("input", () => {
+      const i = +el.closest(".srow").dataset.i;
+      const k = el.dataset.k;
+      state.schedules[i][k] = el.type === "checkbox" ? el.checked : el.value;
+      markDirty();
+    });
+  });
+  box.querySelectorAll("[data-del]").forEach((el) => {
+    el.addEventListener("click", () => {
+      const i = +el.dataset.del;
+      if (!confirm("删掉这条播报？")) return;
+      state.schedules.splice(i, 1);
+      renderSchedules();
+      markDirty();
+      toast("已删除，记得点「保存播报表」");
+    });
+  });
+  box.querySelectorAll(".day").forEach((el) => {
+    el.addEventListener("click", () => {
+      const i = +el.closest(".srow").dataset.i;
+      const d = +el.dataset.d;
+      const days = new Set(state.schedules[i].days || []);
+      days.has(d) ? days.delete(d) : days.add(d);
+      state.schedules[i].days = [...days].sort((a, b) => a - b);
+      el.classList.toggle("sel");
+      markDirty();
+    });
+  });
+}
+
+function renderDevice() {
+  const devs = state.devices || [];
+  const cur = state.device || {};
+  const sel = $("deviceSel");
+  sel.innerHTML = devs.length
+    ? devs.map((d) => `<option value="${esc(d.did)}" ${d.did === cur.did ? "selected" : ""}>${esc(d.name)}${d.model ? "（" + esc(d.model) + "）" : ""}</option>`).join("")
+    : `<option value="">（还没拉设备）</option>`;
+  $("devHint").textContent = cur.did ? "当前：" + cur.name : "";
+}
+
+function renderSettings() {
+  const llm = state.llm || {};
+  if (document.activeElement !== $("llmBase")) $("llmBase").value = llm.base || "";
+  if (document.activeElement !== $("llmModel")) $("llmModel").value = llm.model || "";
+  if (document.activeElement !== $("llmMaxTokens")) $("llmMaxTokens").value = llm.maxTokens || 0;
+  if (document.activeElement !== $("llmEffort")) $("llmEffort").value = llm.effort || "";
+  $("llmHint").innerHTML = llm.ready
+    ? `已配置（Key ${esc(llm.keyMask || "")}）。点「测试连接」可以确认地址和 Key 是否还行。`
+    : `还没配置：填一个兼容 OpenAI 的接口地址 + API Key（比如 DeepSeek 的 <code>https://api.deepseek.com/v1</code> + <code>deepseek-chat</code>）。`;
+
+  const mc = state.musicCfg || {};
+  if (document.activeElement !== $("musicDirs")) $("musicDirs").value = (mc.dirs || []).join("\n");
+  if (document.activeElement !== $("musicPort")) $("musicPort").value = mc.port || 0;
+  if (document.activeElement !== $("musicBase")) $("musicBase").value = mc.base || "";
+  $("musicCfgHint").innerHTML = `改端口或目录后需要重启应用才生效。当前音源地址：<code>${esc(state.music.base || "（未探测到）")}</code>`;
+
+  $("ticketState").textContent = state.micoapi ? "票据已同步" : "还没有票据";
+  $("about").innerHTML = `小爱播报 ${esc(state.version || "")} · 配置在 <code>/vol1/1000/docker/xiaoai-broadcast/</code>`;
+}
+
+function renderStory() {
+  const llm = state.llm || {};
+  $("storyHint").innerHTML = llm.ready
+    ? `已配置大模型（${esc(llm.model || "")}）。提示词留空就走默认：「${esc(state.storyPrompt || "")}」。`
+    : `还没配置大模型：去下面的「设置」里填接口地址和 API Key，填好就能生成。`;
+  if (storyText) {
+    $("storyBox").style.display = "block";
+    $("storyText").textContent = storyText;
+  }
+}
+
+function markDirty() { dirty = true; $("saveBtn").disabled = false; }
+
+// ---------- 曲库 ----------
+async function loadFolders() {
+  const r = await api("/api/music/folders");
+  const folders = (r && r.folders) || [];
+  state.music.folders = folders;
+  state.music.current = (r && r.current) || "";
+  $("folderPick").innerHTML = folders.length
+    ? folders.map((f) => `<option value="${esc(f.path)}" ${f.path === state.music.current ? "selected" : ""}>${esc(f.label)}（${f.count} 首）</option>`).join("")
+    : `<option value="">（没找到音乐文件夹）</option>`;
+}
+
+async function loadSongs() {
+  const r = await api("/api/music/list");
+  state.music.items = (r && r.items) || [];
+  state.music.base = (r && r.base) || "";
+  const items = state.music.items;
+  $("musicPick").innerHTML = items.length
+    ? `<option value="">（选一首…）</option>` + items.map((m) => `<option value="${esc(m.url)}">${esc(m.name)}</option>`).join("")
+    : `<option value="">（这个文件夹里没有音频）</option>`;
+  $("musicHint").innerHTML = items.length
+    ? `共 ${items.length} 首${r.truncated ? "（只列前 800 首）" : ""}。音箱取文件的地址：<code>${esc(state.music.base || "（没探测到局域网地址）")}</code>`
+    : `这个文件夹里没有音频文件。`;
+}
+
+$("folderPick").onchange = async (e) => {
+  const r = await api("/api/music/folder", {folder: e.target.value});
+  if (!r.ok) { toast(r.error || "切换失败", true); return; }
+  await loadSongs();
+  toast("已切换文件夹");
+};
+
+$("musicReload").onclick = async () => {
+  try { await loadFolders(); await loadSongs(); toast("已刷新"); }
+  catch (e) { toast(e.message, true); }
+};
+
+// ---------- 音量 ----------
+async function loadVolume() {
+  if (volBusy) return;
+  try {
+    const r = await api("/api/volume");
+    if (r.ok) {
+      $("volume").value = r.volume;
+      $("volVal").textContent = r.volume;
+    } else {
+      $("volVal").textContent = "读取失败";
+    }
+  } catch (e) { $("volVal").textContent = "读取失败"; }
+}
+
+$("volume").oninput = () => {
+  const v = +$("volume").value;
+  $("volVal").textContent = v;
+  clearTimeout(volTimer);
+  volTimer = setTimeout(async () => {
+    volBusy = true;
+    try {
+      const r = await api("/api/volume", {volume: v});
+      if (!r.ok) toast(r.error || "设置音量失败", true);
+    } catch (e) { toast(e.message, true); }
+    finally { setTimeout(() => { volBusy = false; }, 600); }
+  }, 220);
+};
+
+// ---------- 设置 ----------
+$("llmTest").onclick = async () => {
+  const btn = $("llmTest");
+  btn.disabled = true; btn.textContent = "测试中…";
+  try {
+    const r = await api("/api/llm/test", {base: $("llmBase").value, model: $("llmModel").value, key: $("llmKey").value});
+    if (r.ok) {
+      const models = r.models || [];
+      $("modelList").innerHTML = models.map((m) => `<option value="${esc(m)}"></option>`).join("");
+      toast("连接成功，" + models.length + " 个模型");
+      $("llmHint").innerHTML = `连接成功（${esc(r.base)}）。可用模型：<code>${esc(models.slice(0, 12).join(" / "))}</code>`
+        + (models.length > 12 ? " 等 " + models.length + " 个" : "");
+    } else {
+      toast("连接失败", true);
+      $("llmHint").innerHTML = `连接失败${r.status ? "（HTTP " + r.status + "）" : ""}：${esc(r.error || "")}`;
+    }
+  } catch (e) { toast(e.message, true); }
+  finally { btn.disabled = false; btn.textContent = "测试连接"; }
+};
+
+$("llmSave").onclick = async () => {
+  const r = await api("/api/llm", {base: $("llmBase").value, model: $("llmModel").value, key: $("llmKey").value, maxTokens: +$("llmMaxTokens").value || 0, effort: $("llmEffort").value});
+  if (!r.ok) { toast(r.error || "保存失败", true); return; }
+  $("llmKey").value = "";
+  toast("已保存");
+  await loadState();
+};
+
+$("musicSave").onclick = async () => {
+  const dirs = $("musicDirs").value.split("\n").map((s) => s.trim()).filter(Boolean);
+  const r = await api("/api/music/settings", {dirs, port: +$("musicPort").value || 0, base: $("musicBase").value});
+  if (!r.ok) { toast(r.error || "保存失败", true); return; }
+  toast(r.note || "已保存");
+  await loadState();
+  await loadFolders();
+  await loadSongs();
+};
+
+$("syncBtn").onclick = async () => {
+  const btn = $("syncBtn");
+  btn.disabled = true; btn.textContent = "同步中…";
+  try {
+    const r = await api("/api/sync", {});
+    state.devices = r.devices || [];
+    toast(r.ok ? ("已同步，" + state.devices.length + " 台设备") : (r.error || "同步失败"), !r.ok);
+    await loadState();
+  } catch (e) { toast(e.message, true); }
+  finally { btn.disabled = false; btn.textContent = "重新同步票据"; }
+};
+
+// ---------- 故事：先生成，再讲 ----------
+async function genStory() {
+  const btn = $("storyGenBtn"), regen = $("storyRegen");
+  const label = btn.textContent;
+  btn.disabled = true; regen.disabled = true; btn.textContent = "生成中…";
+  try {
+    const r = await api("/api/story/generate", {prompt: $("storyPrompt").value});
+    if (r.ok) {
+      storyText = r.story || "";
+      $("storyBox").style.display = "block";
+      $("storyText").textContent = storyText;
+      $("storyMeta").textContent = [r.model, (r.chars || 0) + " 字", r.tookMs ? (r.tookMs / 1000).toFixed(1) + "s" : ""].filter(Boolean).join(" · ");
+      toast("生成好了，看看稿子满意不满意");
+    } else {
+      toast(r.error || "生成失败", true);
+      $("storyHint").innerHTML = "生成失败：" + esc(r.error || "");
+    }
+  } catch (e) { toast(e.message, true); }
+  finally { btn.disabled = false; regen.disabled = false; btn.textContent = label; }
+}
+
+$("storyGenBtn").onclick = genStory;
+$("storyRegen").onclick = genStory;
+
+$("storySpeakBtn").onclick = async () => {
+  if (!storyText) { toast("先生成故事", true); return; }
+  const btn = $("storySpeakBtn");
+  btn.disabled = true; btn.textContent = "发送中…";
+  try {
+    const r = await api("/api/story/speak", {text: storyText});
+    toast(r.ok ? "正在念，听一下音箱" : (r.error || "失败"), !r.ok);
+    await loadState();
+  } catch (e) { toast(e.message, true); }
+  finally { btn.disabled = false; btn.textContent = "让小爱讲"; }
+};
+
+// ---------- 其他 ----------
+async function reloadDevices() {
+  const r = await api("/api/devices");
+  state.devices = r.devices || [];
+  renderDevice();
+  toast(r.ok ? ("拉到 " + state.devices.length + " 台设备") : (r.error || "拉取失败"), !r.ok);
+}
+
+$("deviceSel").onchange = async (e) => {
+  const d = (state.devices || []).find((x) => x.did === e.target.value);
+  if (!d) return;
+  const r = await api("/api/device", {did: d.did, name: d.name, model: d.model || ""});
+  if (r.ok) { toast("已选 " + d.name); await loadState(); await loadVolume(); } else { toast(r.error || "保存失败", true); }
+};
+$("reloadDev").onclick = async () => { await reloadDevices(); await loadVolume(); };
+
+$("addBtn").onclick = () => {
+  state.schedules = state.schedules || [];
+  state.schedules.push({id: "", time: "07:00", days: [1,2,3,4,5], kind: "say", text: "早上好，出门前记得：带汗巾、吃维生素、抹油油。", enabled: true});
+  renderSchedules(); markDirty();
+};
+
+$("saveBtn").onclick = async () => {
+  const payload = (state.schedules || []).map((s) => ({
+    id: s.id || "", time: s.time, days: s.days || [], kind: "say", text: s.text || "", enabled: !!s.enabled
+  }));
+  for (const s of payload) {
+    if (!s.text.trim()) { toast("有一条文案是空的", true); return; }
+  }
+  const r = await api("/api/schedules", {schedules: payload});
+  if (!r.ok) { toast(r.error || "保存失败", true); return; }
+  dirty = false; $("saveBtn").disabled = true;
+  toast("已保存");
+  await loadState();
+};
+
+$("playBtn").onclick = async () => {
+  const url = $("musicPick").value;
+  if (!url) { toast("先在曲库里选一首", true); return; }
+  const btn = $("playBtn");
+  btn.disabled = true; btn.textContent = "播放中…";
+  try {
+    const r = await api("/api/play", {url});
+    toast(r.ok ? "正在播放" : (r.error || "播放失败"), !r.ok);
+    await loadState();
+  } catch (e) { toast(e.message, true); }
+  finally { btn.disabled = false; btn.textContent = "播放"; }
+};
+
+$("stopBtn").onclick = async () => {
+  const r = await api("/api/stop", {});
+  toast(r.ok ? "已停止" : (r.error || "停止失败"), !r.ok);
+};
+
+$("testBtn").onclick = async () => {
+  const btn = $("testBtn");
+  btn.disabled = true; btn.textContent = "发送中…";
+  try {
+    const r = await api("/api/test", {text: $("testText").value});
+    toast(r.ok ? "已发出去，听一下音箱" : (r.error || "失败"), !r.ok);
+    await loadState();
+  } catch (e) { toast(e.message, true); }
+  finally { btn.disabled = false; btn.textContent = "说话"; }
+};
+
+loadState()
+  .then(() => Promise.all([loadFolders(), loadVolume()]))
+  .then(loadSongs)
+  .catch((e) => { $("badge").textContent = "连不上应用"; toast(e.message, true); });
+setInterval(() => { if (!dirty) loadState().catch(() => {}); }, 30000);
+</script>
+</body>
+</html>

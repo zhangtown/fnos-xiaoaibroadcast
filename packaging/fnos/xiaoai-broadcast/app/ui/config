@@ -1,0 +1,15 @@
+{
+  ".url": {
+    "xiaoai-broadcast.main": {
+      "title": "小爱播报",
+      "icon": "images/icon_{0}.png",
+      "type": "iframe",
+      "protocol": "",
+      "gatewayPrefix": "/app/xiaoai-broadcast",
+      "gatewaySocket": "app.sock",
+      "url": "/app/xiaoai-broadcast",
+      "allUsers": false,
+      "control": { "accessPerm": "readonly" }
+    }
+  }
+}

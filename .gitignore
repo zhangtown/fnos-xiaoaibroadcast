@@ -1,0 +1,12 @@
+# 构建产物
+dist/
+.tmp/
+packaging/fnos/xiaoai-broadcast/app/bin/
+packaging/fnos/xiaoai-broadcast/app.tgz
+
+# 本地调试时可能生成的数据目录
+data/
+
+# Windows 杂项
+Thumbs.db
+desktop.ini

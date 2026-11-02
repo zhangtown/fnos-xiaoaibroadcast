@@ -1,0 +1,6 @@
+# 一律 LF：cmd/ 下是 sh 脚本，CRLF 会让 NAS 上直接“bad interpreter”
+* text=auto eol=lf
+
+# 图片按二进制处理
+*.png binary
+*.PNG binary
