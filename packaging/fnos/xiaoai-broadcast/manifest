@@ -1,5 +1,5 @@
 appname=xiaoai-broadcast
-version=2.15.9
+version=2.16.0
 desc=到点让小爱说句话；另有音乐卡片（NAS 曲库播放）和故事卡片（大模型现编童话再让小爱念）。设置卡片里放大模型、曲库音源、票据同步。飞牛统一网关。
 display_name=小爱播报
 maintainer=zhangtown
@@ -10,4 +10,4 @@ source=thirdparty
 os_min_version=1.1.3100
 ctl_stop=true
 install_type=root
-changelog=2.15.9：修两处——「让小爱讲」改走合成引擎（之前仍走小爱自带，所以音色不对）；合成播放会在估算时长后自动停一次，避免小米音箱单曲循环一直重复。2.15.8：端口 18095。
+changelog=2.16.0：故事卡片加「停止」按钮，讲故事途中可以随时打断；2.15.9：故事改走合成引擎、播放到时长自动停。2.15.8：端口 18095。

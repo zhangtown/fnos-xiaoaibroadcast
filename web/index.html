@@ -196,6 +196,7 @@
       <div class="row" style="margin-top:10px;align-items:center">
         <button class="btn" id="storyRegen">重新生成</button>
         <button class="btn primary" id="storySpeakBtn">让小爱讲</button>
+        <button class="btn" id="storyStopBtn">停止</button>
         <span class="h" id="storyMeta" style="font-size:12.5px;color:var(--muted)"></span>
       </div>
     </div>
@@ -865,6 +866,16 @@ async function genStory() {
 $("storyGenBtn").onclick = genStory;
 $("storyRegen").onclick = genStory;
 
+$("storyStopBtn").onclick = async () => {
+  const btn = $("storyStopBtn");
+  btn.disabled = true; btn.textContent = "停止中…";
+  try {
+    const r = await api("/api/stop", {});
+    toast(r.ok ? "已停止播放" : (r.error || "停止失败"), !r.ok);
+    await loadState();
+  } catch (e) { toast(e.message, true); }
+  finally { btn.disabled = false; btn.textContent = "停止"; }
+};
 $("storySpeakBtn").onclick = async () => {
   if (!storyText) { toast("先生成故事", true); return; }
   const btn = $("storySpeakBtn");
