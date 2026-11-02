@@ -241,36 +241,49 @@
     <div class="sep"></div>
     <div class="tip" style="margin:0 0 10px"><b>故事语音</b>（只影响「让小爱讲」，播报仍走小爱自带）</div>
     <div class="row">
-      <div class="grow" style="flex:0 1 190px">
+      <div class="grow" style="flex:0 1 280px">
         <label class="lbl">引擎</label>
         <select id="speechEngine">
           <option value="">小爱自带（稳）</option>
-          <option value="openai">OpenAI 兼容语音（用大模型的地址和 Key）</option>
           <option value="qwen">阿里云百炼 Qwen-Audio-TTS（推荐）</option>
-          <option value="tencent">腾讯云语音合成（需 SecretId/SecretKey）</option>
+          <option value="tencent">腾讯云语音合成</option>
+          <option value="openai">OpenAI 兼容语音</option>
         </select>
       </div>
-      <div class="grow" style="flex:0 1 300px">
-        <label class="lbl">音色</label>
-        <input type="text" id="speechVoice" list="voiceList" placeholder="音色 id" />
-        <datalist id="voiceList"></datalist>
+      <div class="grow" id="speechBaseWrap">
+        <label class="lbl">接口地址（留空=默认）</label>
+        <input type="text" id="speechBase" placeholder="wss://dashscope.aliyuncs.com/api-ws/v1/inference" />
+      </div>
+      <div class="grow" id="speechKeyWrap">
+        <label class="lbl">API Key（留空=不修改）</label>
+        <input type="password" id="speechKey" placeholder="sk-..." autocomplete="off" />
       </div>
     </div>
-    <div class="row" id="speechApiRow" style="margin-top:10px;display:none">
-      <div class="grow"><label class="lbl">接口地址（留空=默认）</label><input type="text" id="speechBase" placeholder="wss://dashscope.aliyuncs.com/api-ws/v1/inference" /></div>
-      <div class="grow" style="flex:0 1 230px"><label class="lbl">模型</label><input type="text" id="speechModel" list="speechModelList" placeholder="qwen-audio-3.1-tts-flash" /><datalist id="speechModelList"></datalist></div>
-      <div class="grow"><label class="lbl">API Key（留空=不修改）</label><input type="password" id="speechKey" placeholder="sk-..." autocomplete="off" /></div>
+    <div class="row" style="margin-top:10px;align-items:flex-end">
+      <div class="grow" style="flex:0 1 250px">
+        <label class="lbl">模型</label>
+        <select id="speechModel"></select>
+      </div>
+      <div class="grow" style="flex:1 1 300px">
+        <label class="lbl">音色</label>
+        <select id="speechVoice"></select>
+      </div>
+      <div style="display:flex;gap:10px;padding-bottom:1px">
+        <button class="btn" id="speechTest">试听</button>
+        <button class="btn primary" id="speechSave">保存</button>
+      </div>
+    </div>
+    <div class="row" id="speechCustomRow" style="margin-top:10px;display:none">
+      <div class="grow"><label class="lbl">自定义模型名</label><input type="text" id="speechModelCustom" placeholder="模型 id" /></div>
+      <div class="grow"><label class="lbl">自定义音色 id</label><input type="text" id="speechVoiceCustom" placeholder="音色 id" /></div>
     </div>
     <div class="row" id="speechTencentRow" style="margin-top:10px;display:none">
       <div class="grow"><label class="lbl">SecretId</label><input type="text" id="speechSid" placeholder="AKID..." autocomplete="off" /></div>
       <div class="grow"><label class="lbl">SecretKey</label><input type="password" id="speechSkey" placeholder="留空表示不修改" autocomplete="off" /></div>
       <div class="grow" style="flex:0 1 150px"><label class="lbl">地域</label><input type="text" id="speechRegion" placeholder="ap-shanghai" /></div>
     </div>
-    <div class="row" style="margin-top:10px;justify-content:flex-end">
-      <button class="btn" id="speechTest">试听</button>
-      <button class="btn primary" id="speechSave">保存</button>
-    </div>
     <div class="tip" id="speechHint">合成失败会自动退回小爱朗读，不会没声。</div>
+
 
     <div class="sep"></div>
     <div class="tip" style="margin:0 0 10px"><b>曲库与音源</b>（音箱从这里取歌）</div>
@@ -479,9 +492,8 @@ function renderSettings() {
   if (!speechDirty) {
     $("speechEngine").value = ["openai", "tencent", "qwen"].includes(sp.engine) ? sp.engine : "";
     $("speechBase").value = sp.base || "";
-    $("speechModel").value = sp.model || "";
     $("speechRegion").value = sp.region || "";
-    fillSpeechVoices(sp.voice);
+    fillSpeechOptions(sp.voice || "", sp.model || "");
   }
   if (document.activeElement !== $("speechHint")) speechStatus();
 
@@ -608,38 +620,88 @@ $("musicSave").onclick = async () => {
   await loadSongs();
 };
 
-function fillSpeechVoices(keep) {
+// 引擎 → 可选模型 / 音色
+function speechModelsFor(engine) {
+  if (engine === "qwen") return state.qwenModels || [];
+  if (engine === "openai") return ["tts-1", "FunAudioLLM/CosyVoice2-0.5B"];
+  return [];
+}
+function speechVoicesFor(engine) {
+  if (engine === "qwen") return state.qwenVoices || [];
+  if (engine === "openai") return state.openaiVoices || [];
+  if (engine === "tencent") return state.tencentVoices || [];
+  return [];
+}
+
+// 把模型/音色两个下拉填好；当前值不在候选里就加一条“自定义”
+function fillSpeechOptions(voice, model) {
   const engine = $("speechEngine").value;
-  let voices = [];
-  if (engine === "openai") voices = state.openaiVoices || [];
-  else if (engine === "tencent") voices = state.tencentVoices || [];
-  else if (engine === "qwen") voices = state.qwenVoices || [];
-  // 模型也给个候选：百炼有 flash/plus × 3.1/3.0 四个
-  const models = engine === "qwen" ? (state.qwenModels || [])
-    : engine === "openai" ? ["tts-1", "FunAudioLLM/CosyVoice2-0.5B"] : [];
-  $("speechModelList").innerHTML = models.map((m) => `<option value="${esc(m)}"></option>`).join("");
-  $("voiceList").innerHTML = voices.map((v) => `<option value="${esc(v.id)}">${esc(v.label)}</option>`).join("");
-  $("speechApiRow").style.display = (engine === "openai" || engine === "qwen") ? "flex" : "none";
+  const showAudio = engine === "qwen" || engine === "openai";
+
+  $("speechBaseWrap").style.display = showAudio ? "" : "none";
+  $("speechKeyWrap").style.display = showAudio ? "" : "none";
   $("speechTencentRow").style.display = engine === "tencent" ? "flex" : "none";
-  if (keep !== undefined) $("speechVoice").value = keep || (voices[0] && voices[0].id) || "";
+
+  const models = speechModelsFor(engine);
+  const curModel = model !== undefined ? model : $("speechModel").value;
+  $("speechModel").innerHTML = models.map((m) => `<option value="${esc(m)}">${esc(m)}</option>`).join("")
+    + `<option value="__custom__">自定义…</option>`;
+  if (models.includes(curModel)) {
+    $("speechModel").value = curModel;
+    $("speechModelCustom").value = "";
+  } else {
+    $("speechModel").value = "__custom__";
+    $("speechModelCustom").value = curModel || "";
+  }
+
+  const voices = speechVoicesFor(engine);
+  const curVoice = voice !== undefined ? voice : $("speechVoice").value;
+  $("speechVoice").innerHTML = voices.map((v) => `<option value="${esc(v.id)}">${esc(v.label)}</option>`).join("")
+    + `<option value="__custom__">自定义…</option>`;
+  if (!voices.length) {
+    $("speechVoice").innerHTML = `<option value="">（该引擎不需要选音色）</option>`;
+    $("speechVoice").value = "";
+  } else if (voices.some((v) => v.id === curVoice)) {
+    $("speechVoice").value = curVoice;
+    $("speechVoiceCustom").value = "";
+  } else {
+    $("speechVoice").value = "__custom__";
+    $("speechVoiceCustom").value = curVoice || "";
+  }
+  syncSpeechCustomRow();
+}
+
+function syncSpeechCustomRow() {
+  const need = $("speechModel").value === "__custom__" && speechModelsFor($("speechEngine").value).length > 0
+    || $("speechVoice").value === "__custom__";
+  $("speechCustomRow").style.display = need ? "flex" : "none";
 }
 
 // 选中引擎后带入它的默认地址/模型/音色；API Key 一律留空让人自己填
 const SPEECH_PRESETS = {
-  openai: { base: "https://api.siliconflow.cn/v1", model: "FunAudioLLM/CosyVoice2-0.5B" },
-  qwen: { base: "wss://dashscope.aliyuncs.com/api-ws/v1/inference", model: "qwen-audio-3.1-tts-flash" },
-  tencent: { base: "", model: "" },
-  "": { base: "", model: "" },
+  openai: { base: "https://api.siliconflow.cn/v1", model: "FunAudioLLM/CosyVoice2-0.5B", voice: "FunAudioLLM/CosyVoice2-0.5B:claire" },
+  qwen: { base: "wss://dashscope.aliyuncs.com/api-ws/v1/inference", model: "qwen-audio-3.1-tts-flash", voice: "wenhuaiqing_v3.1" },
+  tencent: { base: "", model: "", voice: "101001" },
+  "": { base: "", model: "", voice: "" },
 };
 
 $("speechEngine").onchange = () => {
   const engine = $("speechEngine").value;
-  const preset = SPEECH_PRESETS[engine] || { base: "", model: "" };
+  const preset = SPEECH_PRESETS[engine] || { base: "", model: "", voice: "" };
   $("speechBase").value = preset.base;
-  $("speechModel").value = preset.model;
   $("speechKey").value = "";
-  fillSpeechVoices("");
+  fillSpeechOptions(preset.voice, preset.model);
 };
+
+$("speechModel").onchange = () => { syncSpeechCustomRow(); speechDirty = true; speechStatus(); };
+$("speechVoice").onchange = () => { syncSpeechCustomRow(); speechDirty = true; speechStatus(); };
+
+function currentSpeechModel() {
+  return $("speechModel").value === "__custom__" ? $("speechModelCustom").value.trim() : $("speechModel").value;
+}
+function currentSpeechVoice() {
+  return $("speechVoice").value === "__custom__" ? $("speechVoiceCustom").value.trim() : $("speechVoice").value;
+}
 
 // 把「密钥到底存没存上」显示出来，省得靠猜
 // 大模型 / 曲库两组表单同样加 dirty 保护
@@ -654,7 +716,7 @@ $("speechEngine").onchange = () => {
   });
 });
 // 任何一个语音字段被动过，就标记 dirty，直到保存
-["speechEngine", "speechBase", "speechModel", "speechVoice", "speechKey", "speechSid", "speechSkey", "speechRegion"].forEach((id) => {
+["speechEngine", "speechBase", "speechModel", "speechVoice", "speechModelCustom", "speechVoiceCustom", "speechKey", "speechSid", "speechSkey", "speechRegion"].forEach((id) => {
   const el = $(id);
   if (!el) return;
   const mark = () => { speechDirty = true; speechStatus(); };
@@ -673,7 +735,7 @@ function speechStatus() {
   if (parts.length) $("speechHint").innerHTML = esc(parts.join(" · "));
 }
 $("speechSave").onclick = async () => {
-  const r = await api("/api/speech", {engine: $("speechEngine").value, voice: $("speechVoice").value, base: $("speechBase").value, model: $("speechModel").value, key: $("speechKey").value, secretId: $("speechSid").value, secretKey: $("speechSkey").value, region: $("speechRegion").value});
+  const r = await api("/api/speech", {engine: $("speechEngine").value, voice: currentSpeechVoice(), base: $("speechBase").value, model: currentSpeechModel(), key: $("speechKey").value, secretId: $("speechSid").value, secretKey: $("speechSkey").value, region: $("speechRegion").value});
   toast(r.ok ? "已保存" : (r.error || "保存失败"), !r.ok);
   if (r.ok) { $("speechKey").value = ""; $("speechSkey").value = ""; speechDirty = false; await loadState(); toast("已保存（Key 已写入配置）"); }
 };
@@ -682,7 +744,7 @@ $("speechTest").onclick = async () => {
   const btn = $("speechTest");
   btn.disabled = true; btn.textContent = "合成中…";
   try {
-    const r = await api("/api/speech/test", {engine: $("speechEngine").value, voice: $("speechVoice").value, base: $("speechBase").value, model: $("speechModel").value, key: $("speechKey").value, secretId: $("speechSid").value, secretKey: $("speechSkey").value, region: $("speechRegion").value});
+    const r = await api("/api/speech/test", {engine: $("speechEngine").value, voice: currentSpeechVoice(), base: $("speechBase").value, model: currentSpeechModel(), key: $("speechKey").value, secretId: $("speechSid").value, secretKey: $("speechSkey").value, region: $("speechRegion").value});
     if (r.ok) {
       toast("合成用了 " + (r.ms / 1000).toFixed(1) + " 秒，正在放");
       $("speechHint").innerHTML = `可用（${esc(r.voice)}，合成 ${(r.ms / 1000).toFixed(1)} 秒）。保存后，讲故事就用这个声音。`;
