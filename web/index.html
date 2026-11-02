@@ -203,11 +203,6 @@
   </section>
 
   <section class="card">
-    <h2>执行记录 <span class="hint">最近 60 条，重启不丢</span></h2>
-    <div class="logs" id="logs"></div>
-  </section>
-
-  <section class="card">
     <h2>设置</h2>
 
     <div class="tip" style="margin:0 0 10px"><b>大模型</b>（讲故事用，OpenAI 兼容接口）</div>
@@ -253,7 +248,6 @@
           <option value="openai">OpenAI 兼容语音（用大模型的地址和 Key）</option>
           <option value="qwen">阿里云百炼 Qwen-Audio-TTS（推荐）</option>
           <option value="tencent">腾讯云语音合成（需 SecretId/SecretKey）</option>
-          <option value="edge">Edge TTS（微软，多数网络会被拒）</option>
         </select>
       </div>
       <div class="grow" style="flex:0 1 240px">
@@ -274,7 +268,7 @@
       <div class="grow"><label class="lbl">SecretKey</label><input type="password" id="speechSkey" placeholder="留空表示不修改" autocomplete="off" /></div>
       <div class="grow" style="flex:0 1 150px"><label class="lbl">地域</label><input type="text" id="speechRegion" placeholder="ap-shanghai" /></div>
     </div>
-    <div class="tip" id="speechHint">Edge TTS 需要 NAS 能连上微软的接口；连不上会自动退回小爱，不会没声。</div>
+    <div class="tip" id="speechHint">合成失败会自动退回小爱朗读，不会没声。</div>
 
     <div class="sep"></div>
     <div class="tip" style="margin:0 0 10px"><b>曲库与音源</b>（音箱从这里取歌）</div>
@@ -297,6 +291,11 @@
 
     <div class="sep"></div>
     <div class="tip" id="about"></div>
+  </section>
+
+  <section class="card">
+    <h2>执行记录 <span class="hint">最近 60 条，重启不丢</span></h2>
+    <div class="logs" id="logs"></div>
   </section>
 </div>
 <div class="toast" id="toast"></div>
@@ -465,7 +464,7 @@ function renderSettings() {
   $("musicCfgHint").innerHTML = `改端口或目录后需要重启应用才生效。当前音源地址：<code>${esc(state.music.base || "（未探测到）")}</code>`;
 
   const sp = state.speech || {};
-  $("speechEngine").value = ["edge", "openai", "tencent", "qwen"].includes(sp.engine) ? sp.engine : "";
+  $("speechEngine").value = ["openai", "tencent", "qwen"].includes(sp.engine) ? sp.engine : "";
   if (document.activeElement !== $("speechBase")) $("speechBase").value = sp.base || "";
   if (document.activeElement !== $("speechModel")) $("speechModel").value = sp.model || "";
   if (document.activeElement !== $("speechRegion")) $("speechRegion").value = sp.region || "";
@@ -594,10 +593,10 @@ $("musicSave").onclick = async () => {
 
 function fillSpeechVoices(keep) {
   const engine = $("speechEngine").value;
-  let voices = state.voices || [];
+  let voices = [];
   if (engine === "openai") voices = state.openaiVoices || [];
-  if (engine === "tencent") voices = state.tencentVoices || [];
-  if (engine === "qwen") voices = state.qwenVoices || [];
+  else if (engine === "tencent") voices = state.tencentVoices || [];
+  else if (engine === "qwen") voices = state.qwenVoices || [];
   $("voiceList").innerHTML = voices.map((v) => `<option value="${esc(v.id)}">${esc(v.label)}</option>`).join("");
   $("speechApiRow").style.display = (engine === "openai" || engine === "qwen") ? "flex" : "none";
   $("speechTencentRow").style.display = engine === "tencent" ? "flex" : "none";
@@ -609,7 +608,6 @@ const SPEECH_PRESETS = {
   openai: { base: "https://api.siliconflow.cn/v1", model: "FunAudioLLM/CosyVoice2-0.5B" },
   qwen: { base: "wss://dashscope.aliyuncs.com/api-ws/v1/inference", model: "qwen-audio-3.1-tts-flash" },
   tencent: { base: "", model: "" },
-  edge: { base: "", model: "" },
   "": { base: "", model: "" },
 };
 
@@ -635,10 +633,10 @@ $("speechTest").onclick = async () => {
     const r = await api("/api/speech/test", {engine: $("speechEngine").value, voice: $("speechVoice").value, base: $("speechBase").value, model: $("speechModel").value, key: $("speechKey").value, secretId: $("speechSid").value, secretKey: $("speechSkey").value, region: $("speechRegion").value});
     if (r.ok) {
       toast("合成用了 " + (r.ms / 1000).toFixed(1) + " 秒，正在放");
-      $("speechHint").innerHTML = `Edge 可用（${esc(r.voice)}，合成 ${(r.ms / 1000).toFixed(1)} 秒）。选「Edge TTS」保存后，讲故事就用这个声音。`;
+      $("speechHint").innerHTML = `可用（${esc(r.voice)}，合成 ${(r.ms / 1000).toFixed(1)} 秒）。保存后，讲故事就用这个声音。`;
     } else {
       toast("失败", true);
-      $("speechHint").innerHTML = `Edge 合成失败：${esc(r.error || "")}（这种情况下故事会自动退回小爱朗读）`;
+      $("speechHint").innerHTML = `合成失败：${esc(r.error || "")}（这种情况下故事会自动退回小爱朗读）`;
     }
   } catch (e) { toast(e.message, true); }
   finally { btn.disabled = false; btn.textContent = "试听"; }

@@ -1,5 +1,5 @@
 appname=xiaoai-broadcast
-version=2.13.1
+version=2.14.0
 desc=到点让小爱说句话；另有音乐卡片（NAS 曲库播放）和故事卡片（大模型现编童话再让小爱念）。设置卡片里放大模型、曲库音源、票据同步。飞牛统一网关。
 display_name=小爱播报
 maintainer=zhangtown
@@ -10,4 +10,4 @@ source=thirdparty
 os_min_version=1.1.3100
 ctl_stop=true
 install_type=root
-changelog=2.13.1：切换引擎时自动带入该引擎的接口地址/模型/音色，API Key 留空（保存时留空不再清掉已存的 key）。2.13.0：百炼 Qwen-Audio-TTS。2.12.0：腾讯云 TTS。
+changelog=2.14.0：整理引擎——删掉已被微软拦死的 Edge TTS（以及它那套 GEC/muid 握手代码），保留 小爱自带 / 百炼 Qwen / 腾讯云 / OpenAI 兼容 四项；执行记录卡片移到页面最后。2.13.x：百炼 Qwen、引擎预设。

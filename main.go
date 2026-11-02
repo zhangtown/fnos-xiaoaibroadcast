@@ -169,7 +169,6 @@ func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
 		"speech": map[string]any{"engine": cfg.Speech.Engine, "voice": cfg.Speech.Voice, "base": cfg.Speech.Base, "model": cfg.Speech.Model, "region": cfg.Speech.Region, "hasTencent": cfg.Speech.SecretID != ""},
 		"tencentVoices": tencentVoices,
 		"qwenVoices": qwenVoices,
-		"voices": edgeVoices,
 		"openaiVoices": openaiVoices,
 		"next":      NextRuns(cfg, 4),
 		"logs":      logs,
