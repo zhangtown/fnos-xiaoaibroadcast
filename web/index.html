@@ -250,7 +250,8 @@
         <label class="lbl">引擎</label>
         <select id="speechEngine">
           <option value="">小爱自带（稳）</option>
-          <option value="edge">Edge TTS（微软）</option>
+          <option value="openai">OpenAI 兼容语音（用大模型的地址和 Key）</option>
+          <option value="edge">Edge TTS（微软，多数网络会被拒）</option>
         </select>
       </div>
       <div class="grow" style="flex:0 1 240px">
@@ -451,10 +452,8 @@ function renderSettings() {
   $("musicCfgHint").innerHTML = `改端口或目录后需要重启应用才生效。当前音源地址：<code>${esc(state.music.base || "（未探测到）")}</code>`;
 
   const sp = state.speech || {};
-  $("speechEngine").value = sp.engine === "edge" ? "edge" : "";
-  const voices = state.voices || [];
-  $("speechVoice").innerHTML = voices.map((v) => `<option value="${esc(v.id)}">${esc(v.label)}</option>`).join("");
-  $("speechVoice").value = sp.voice || (voices[0] && voices[0].id) || "";
+  $("speechEngine").value = sp.engine === "edge" || sp.engine === "openai" ? sp.engine : "";
+  fillSpeechVoices(sp.voice);
 
   $("ticketState").textContent = state.micoapi ? "票据已同步" : "还没有票据";
   $("about").innerHTML = `小爱播报 ${esc(state.version || "")} · 配置在 <code>/vol1/1000/docker/xiaoai-broadcast/</code>`;
@@ -577,6 +576,15 @@ $("musicSave").onclick = async () => {
   await loadSongs();
 };
 
+function fillSpeechVoices(keep) {
+  const engine = $("speechEngine").value;
+  const voices = engine === "openai" ? (state.openaiVoices || []) : (state.voices || []);
+  const cur = keep || $("speechVoice").value;
+  $("speechVoice").innerHTML = voices.map((v) => `<option value="${esc(v.id)}">${esc(v.label)}</option>`).join("");
+  if (cur && voices.some((v) => v.id === cur)) $("speechVoice").value = cur;
+}
+
+$("speechEngine").onchange = () => fillSpeechVoices("");
 $("speechSave").onclick = async () => {
   const r = await api("/api/speech", {engine: $("speechEngine").value, voice: $("speechVoice").value});
   toast(r.ok ? "已保存" : (r.error || "保存失败"), !r.ok);
@@ -587,7 +595,7 @@ $("speechTest").onclick = async () => {
   const btn = $("speechTest");
   btn.disabled = true; btn.textContent = "合成中…";
   try {
-    const r = await api("/api/speech/test", {voice: $("speechVoice").value});
+    const r = await api("/api/speech/test", {engine: $("speechEngine").value, voice: $("speechVoice").value});
     if (r.ok) {
       toast("合成用了 " + (r.ms / 1000).toFixed(1) + " 秒，正在放");
       $("speechHint").innerHTML = `Edge 可用（${esc(r.voice)}，合成 ${(r.ms / 1000).toFixed(1)} 秒）。选「Edge TTS」保存后，讲故事就用这个声音。`;

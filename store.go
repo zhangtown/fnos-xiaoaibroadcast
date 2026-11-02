@@ -45,7 +45,8 @@ type Schedule struct {
 // Speech 是「故事语音」：默认走小爱自带 TTS，选了 edge 才用微软的合成。
 type Speech struct {
 	Engine string `json:"engine"` // " 或 xiaomi = 小爱自带；edge = Edge TTS
-	Voice  string `json:"voice"`  // Edge 音色 id
+	Voice  string `json:"voice"`  // 音色 id（edge / openai 两套）
+	Model  string `json:"model"`  // OpenAI 兼容语音接口的模型名，默认 tts-1
 }
 
 type LLM struct {

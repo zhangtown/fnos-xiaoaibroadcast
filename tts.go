@@ -1,9 +1,10 @@
-// Edge TTS：直连微软 Edge「大声朗读」的免费接口，把文字合成 mp3。
+// 语音合成：两种引擎。
 //
-// 为什么不用第三方库：整个工程零依赖，所以这里手写了一个够用的 WebSocket 客户端
-// （握手 + 掩码帧 + 分片拼接），只实现这件事需要的部分。
+//  1. OpenAI 兼容的 {base}/audio/speech（默认走大模型那套地址和 Key）——这是主推路径；
+//  2. Edge TTS：直连微软 Edge「大声朗读」的免费接口。微软在边缘按客户端特征拦非浏览器请求，
+//     实测 Go / Python / 官方 edge-tts 包全是 403，留着只是备用，不通会自动退回小爱朗读。
 //
-// 合成结果按「文本+音色」的哈希缓存到数据目录 tts/ 下，同一篇故事第二次播放不再重复合成。
+// 合成结果按「引擎+音色+文本」的哈希缓存到数据目录 tts/，同一篇第二次播放不再重复合成。
 package main
 
 import (
@@ -11,10 +12,12 @@ import (
 	"bytes"
 	"crypto/rand"
 	"crypto/sha1"
+	"crypto/sha256"
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -26,9 +29,13 @@ import (
 )
 
 const (
-	edgeHost  = "speech.platform.bing.com"
+	edgeHost = "speech.platform.bing.com"
+	// 微软 Edge「大声朗读」用的公共客户端令牌（浏览器扩展里的常量，不是个人凭据）
 	edgeToken = "6A5AA1D4EAFF4E9FB37E23D68491D6F4"
-	edgeUA    = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0"
+	// 声明自己是哪个 Chromium 版本，必须和 Sec-MS-GEC-Version 对得上（跟官方 edge-tts 保持一致）
+	edgeChromium = "143.0.3650.75"
+	edgeUA       = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0"
+	edgeOrigin   = "chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold"
 )
 
 var netDialer = net.Dialer{Timeout: 15 * time.Second}
@@ -38,7 +45,6 @@ type edgeVoice struct {
 	Label string `json:"label"`
 }
 
-// 先放这几个够用的：女声晓晓/晓伊、男声云希/云健，外加东北话和台湾腔各一个。
 var edgeVoices = []edgeVoice{
 	{"zh-CN-XiaoxiaoNeural", "晓晓 · 女声 · 标准"},
 	{"zh-CN-XiaoyiNeural", "晓伊 · 女声 · 温柔"},
@@ -48,13 +54,90 @@ var edgeVoices = []edgeVoice{
 	{"zh-CN-Taiwan-XiaochenNeural", "晓辰 · 女声 · 台湾"},
 }
 
-func edgeVoiceLabel(id string) string {
+// OpenAI 兼容语音接口的音色（具体有哪些取决于网关后面接的服务）。
+var openaiVoices = []edgeVoice{
+	{"nova", "nova · 女声 · 温和"},
+	{"shimmer", "shimmer · 女声 · 轻柔"},
+	{"fable", "fable · 讲故事"},
+	{"alloy", "alloy · 中性"},
+	{"echo", "echo · 男声"},
+	{"onyx", "onyx · 男声 · 低沉"},
+}
+
+var ttsHTTP = &http.Client{Timeout: 90 * time.Second}
+
+func voiceLabel(id string) string {
 	for _, v := range edgeVoices {
 		if v.ID == id {
 			return v.Label
 		}
 	}
+	for _, v := range openaiVoices {
+		if v.ID == id {
+			return v.Label
+		}
+	}
 	return id
+}
+
+// ---------- OpenAI 兼容语音接口 ----------
+
+// openaiSynth 走 {base}/audio/speech，复用大模型那套地址和 Key。
+func openaiSynth(cfg Config, text, voice string) ([]byte, error) {
+	base := strings.TrimSuffix(strings.TrimSpace(cfg.LLM.Base), "/")
+	key := strings.TrimSpace(cfg.LLM.Key)
+	if base == "" || key == "" {
+		return nil, fmt.Errorf("还没配置大模型的地址和 Key（设置 → 大模型）")
+	}
+	if voice == "" {
+		voice = "nova"
+	}
+	model := strings.TrimSpace(cfg.Speech.Model)
+	if model == "" {
+		model = "tts-1"
+	}
+	payload, _ := json.Marshal(map[string]any{
+		"model": model, "input": text, "voice": voice, "response_format": "mp3",
+	})
+	req, err := http.NewRequest(http.MethodPost, base+"/audio/speech", bytes.NewReader(payload))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+key)
+	resp, err := ttsHTTP.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("连不上语音接口（%s）：%v", base, err)
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 20<<20))
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("语音接口返回 HTTP %d：%s", resp.StatusCode, truncate(string(raw), 240))
+	}
+	if len(raw) < 512 {
+		return nil, fmt.Errorf("语音接口只回了 %d 字节，不像音频：%s", len(raw), truncate(string(raw), 200))
+	}
+	return raw, nil
+}
+
+// ---------- Edge TTS ----------
+
+// secMSGEC 是微软 2025 年加的握手校验：把「当前时间按 5 分钟取整后的 100ns 计数 + 客户端令牌」
+// 做 SHA256，再转大写十六进制。少了这个参数，握手直接 403。
+func secMSGEC() string {
+	const winEpoch = 11644473600 // 1601-01-01 到 1970-01-01 的秒数
+	secs := time.Now().Unix() + winEpoch
+	secs -= secs % 300
+	ticks := secs * 10_000_000 // 转成 100ns 计数
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%d%s", ticks, edgeToken)))
+	return strings.ToUpper(hex.EncodeToString(sum[:]))
+}
+
+// muid 是微软给的匿名机器 ID，官方客户端每次握手随机生成一个带上。
+func muid() string {
+	var b [16]byte
+	_, _ = rand.Read(b[:])
+	return strings.ToUpper(hex.EncodeToString(b[:]))
 }
 
 // edgeSynth 合成一段语音，返回 mp3 字节。
@@ -77,19 +160,24 @@ func edgeSynth(text, voice string) ([]byte, error) {
 	defer conn.Close()
 	_ = conn.SetDeadline(time.Now().Add(90 * time.Second))
 
-	// ---- 握手 ----
 	var rnd [16]byte
 	_, _ = rand.Read(rnd[:])
 	key := base64.StdEncoding.EncodeToString(rnd[:])
-	path := "/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=" + edgeToken
+	path := "/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=" + edgeToken +
+		"&Sec-MS-GEC=" + secMSGEC() +
+		"&Sec-MS-GEC-Version=1-" + edgeChromium +
+		"&ConnectionId=" + strings.ReplaceAll(requestID(), "-", "")
 	req := "GET " + path + " HTTP/1.1\r\n" +
 		"Host: " + edgeHost + "\r\n" +
 		"Upgrade: websocket\r\n" +
 		"Connection: Upgrade\r\n" +
 		"Sec-WebSocket-Key: " + key + "\r\n" +
 		"Sec-WebSocket-Version: 13\r\n" +
-		"Origin: https://edge.microsoft.com\r\n" +
+		"Origin: " + edgeOrigin + "\r\n" +
 		"User-Agent: " + edgeUA + "\r\n" +
+		"Accept-Encoding: gzip, deflate, br, zstd\r\n" +
+		"Accept-Language: en-US,en;q=0.9\r\n" +
+		"Cookie: muid=" + muid() + ";\r\n" +
 		"Pragma: no-cache\r\n" +
 		"Cache-Control: no-cache\r\n\r\n"
 	if _, err := conn.Write([]byte(req)); err != nil {
@@ -101,7 +189,18 @@ func edgeSynth(text, voice string) ([]byte, error) {
 		return nil, fmt.Errorf("握手无响应：%v", err)
 	}
 	if !strings.Contains(status, "101") {
-		return nil, fmt.Errorf("Edge TTS 拒绝了连接（%s）", strings.TrimSpace(status))
+		detail := ""
+		for i := 0; i < 20; i++ {
+			line, err := br.ReadString('\n')
+			if err != nil || strings.TrimSpace(line) == "" {
+				break
+			}
+			low := strings.ToLower(line)
+			if strings.Contains(low, "x-cache") || strings.Contains(low, "accept-ch") {
+				detail += strings.TrimSpace(line) + " "
+			}
+		}
+		return nil, fmt.Errorf("Edge TTS 拒绝了连接（%s）%s", strings.TrimSpace(status), detail)
 	}
 	for {
 		line, err := br.ReadString('\n')
@@ -113,10 +212,7 @@ func edgeSynth(text, voice string) ([]byte, error) {
 		}
 	}
 
-	ts := time.Now().UTC()
-	stamp := ts.Format("Mon Jan 02 2006 15:04:05") + " GMT+0000 (Coordinated Universal Time)"
-
-	// ---- 语音参数 ----
+	stamp := time.Now().UTC().Format("Mon Jan 02 2006 15:04:05") + " GMT+0000 (Coordinated Universal Time)"
 	cfgMsg := "X-Timestamp:" + stamp + "\r\n" +
 		"Content-Type:application/json; charset=utf-8\r\n" +
 		"Path:speech.config\r\n\r\n" +
@@ -125,7 +221,6 @@ func edgeSynth(text, voice string) ([]byte, error) {
 		return nil, fmt.Errorf("发送配置帧失败：%v", err)
 	}
 
-	// ---- SSML ----
 	esc := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&apos;")
 	ssml := "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='zh-CN'>" +
 		"<voice name='" + voice + "'><prosody pitch='+0Hz' rate='-5%' volume='+0%'>" +
@@ -139,18 +234,17 @@ func edgeSynth(text, voice string) ([]byte, error) {
 		return nil, fmt.Errorf("发送 SSML 失败：%v", err)
 	}
 
-	// ---- 收音频 ----
 	var audio bytes.Buffer
 	for {
 		op, payload, err := wsRead(br)
 		if err != nil {
 			if audio.Len() > 0 {
-				break // 已经拿到音频，结尾帧丢了也认
+				break
 			}
 			return nil, fmt.Errorf("接收音频失败：%v", err)
 		}
 		switch op {
-		case 0x2: // binary：前两字节是头长度
+		case 0x2:
 			if len(payload) < 2 {
 				continue
 			}
@@ -158,18 +252,17 @@ func edgeSynth(text, voice string) ([]byte, error) {
 			if 2+hlen > len(payload) {
 				continue
 			}
-			header := string(payload[2 : 2+hlen])
-			if strings.Contains(header, "Path:audio") {
+			if strings.Contains(string(payload[2:2+hlen]), "Path:audio") {
 				audio.Write(payload[2+hlen:])
 			}
-		case 0x1: // text：看是不是 turn.end
+		case 0x1:
 			if strings.Contains(string(payload), "Path:turn.end") {
 				if audio.Len() == 0 {
-					return nil, fmt.Errorf("Edge TTS 没有返回音频（文本可能被拒）")
+					return nil, fmt.Errorf("Edge TTS 没有返回音频")
 				}
 				return audio.Bytes(), nil
 			}
-		case 0x8: // close
+		case 0x8:
 			if audio.Len() > 0 {
 				return audio.Bytes(), nil
 			}
@@ -258,13 +351,15 @@ func wsRead(r *bufio.Reader) (byte, []byte, error) {
 	return op, payload, nil
 }
 
+// ---------- 缓存与投送 ----------
+
 // synthToFile 合成并缓存到数据目录，返回音箱能取到的地址。
 func (a *App) synthToFile(cfg Config, text, voice string) (string, error) {
 	base := cfg.Music.publicBase()
 	if base == "" {
 		return "", fmt.Errorf("没有可用的音源地址（端口为 0 或没探测到局域网 IP）")
 	}
-	sum := sha1.Sum([]byte(voice + "\x00" + text))
+	sum := sha1.Sum([]byte(cfg.Speech.Engine + "\x00" + voice + "\x00" + text))
 	name := hex.EncodeToString(sum[:8]) + ".mp3"
 	dir := filepath.Join(dataDir(), "tts")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -272,7 +367,13 @@ func (a *App) synthToFile(cfg Config, text, voice string) (string, error) {
 	}
 	full := filepath.Join(dir, name)
 	if st, err := os.Stat(full); err != nil || st.Size() == 0 {
-		mp3, err := edgeSynth(text, voice)
+		var mp3 []byte
+		var err error
+		if cfg.Speech.Engine == "openai" {
+			mp3, err = openaiSynth(cfg, text, voice)
+		} else {
+			mp3, err = edgeSynth(text, voice)
+		}
 		if err != nil {
 			return "", err
 		}
@@ -310,21 +411,23 @@ func (a *App) ttsHandler() http.Handler {
 	})
 }
 
-// speakStory 讲故事专用：开了 Edge 就先合成再放，失败退回小爱朗读。
+// speakStory 讲故事专用：开了合成引擎就先合成再放，失败退回小爱朗读。
 func (a *App) speakStory(cfg Config, text string) error {
-	if cfg.Speech.Engine == "edge" {
+	if cfg.Speech.Engine == "openai" || cfg.Speech.Engine == "edge" {
 		url, err := a.synthToFile(cfg, text, cfg.Speech.Voice)
 		if err == nil {
 			err = a.xm.PlayURL(url, 0)
 		}
 		if err == nil {
-			a.store.AddLog("故事", text, true, "Edge 合成播放（"+edgeVoiceLabel(cfg.Speech.Voice)+"）")
+			a.store.AddLog("故事", text, true, "合成播放（"+voiceLabel(cfg.Speech.Voice)+"）")
 			return nil
 		}
-		a.store.AddLog("故事", text, false, "Edge 失败，退回小爱："+err.Error())
+		a.store.AddLog("故事", text, false, "合成失败，退回小爱："+err.Error())
 	}
 	return a.speak(cfg, text)
 }
+
+// ---------- 接口 ----------
 
 // handleSpeechSave 保存「故事语音」设置。
 func (a *App) handleSpeechSave(w http.ResponseWriter, r *http.Request) {
@@ -332,17 +435,21 @@ func (a *App) handleSpeechSave(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &in) {
 		return
 	}
-	if in.Engine != "edge" {
+	if in.Engine != "edge" && in.Engine != "openai" {
 		in.Engine = ""
 	}
+	list := edgeVoices
+	if in.Engine == "openai" {
+		list = openaiVoices
+	}
 	ok := false
-	for _, v := range edgeVoices {
+	for _, v := range list {
 		if v.ID == in.Voice {
 			ok = true
 		}
 	}
 	if !ok {
-		in.Voice = edgeVoices[0].ID
+		in.Voice = list[0].ID
 	}
 	_ = a.store.Update(func(c *Config) error {
 		c.Speech = in
@@ -354,23 +461,37 @@ func (a *App) handleSpeechSave(w http.ResponseWriter, r *http.Request) {
 // handleSpeechTest 试听：合成一句话直接放出来（不经过大模型）。
 func (a *App) handleSpeechTest(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Voice string `json:"voice"`
-		Text  string `json:"text"`
+		Engine string `json:"engine"`
+		Voice  string `json:"voice"`
+		Text   string `json:"text"`
 	}
 	if !readJSON(w, r, &in) {
 		return
 	}
 	cfg := a.store.Get()
+	engine := in.Engine
+	if engine != "openai" && engine != "edge" {
+		engine = cfg.Speech.Engine
+	}
+	if engine == "" {
+		engine = "openai" // 试听默认试新引擎，省得先去改设置
+	}
 	voice := in.Voice
 	if voice == "" {
 		voice = cfg.Speech.Voice
 	}
 	text := strings.TrimSpace(in.Text)
 	if text == "" {
-		text = "你好，我是" + edgeVoiceLabel(voice) + "。现在，我要给你讲一个故事。"
+		text = "你好，我是" + voiceLabel(voice) + "。现在，我要给你讲一个睡前故事。"
 	}
+
+	// 试听用临时配置，不改已保存的设置
+	probe := cfg
+	probe.Speech.Engine = engine
+	probe.Speech.Voice = voice
+
 	started := time.Now()
-	url, err := a.synthToFile(cfg, text, voice)
+	url, err := a.synthToFile(probe, text, voice)
 	if err != nil {
 		writeJSON(w, 200, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -380,7 +501,6 @@ func (a *App) handleSpeechTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]any{
-		"ok": true, "url": url, "ms": time.Since(started).Milliseconds(),
-		"voice": edgeVoiceLabel(voice),
+		"ok": true, "url": url, "ms": time.Since(started).Milliseconds(), "voice": voiceLabel(voice),
 	})
 }
