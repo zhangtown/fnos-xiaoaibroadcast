@@ -379,6 +379,23 @@ func (a *App) handleSpeechSave(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"ok": true})
 }
 
+// probeURL 用 NAS 自己的身份去取一遍刚生成的音频地址。
+func probeURL(u string) (string, string) {
+	client := &http.Client{Timeout: 8 * time.Second}
+	started := time.Now()
+	resp, err := client.Get(u)
+	if err != nil {
+		return "false", "NAS 自己取不到：" + err.Error()
+	}
+	defer resp.Body.Close()
+	n, _ := io.Copy(io.Discard, io.LimitReader(resp.Body, 4<<20))
+	ms := time.Since(started).Milliseconds()
+	if resp.StatusCode != 200 {
+		return "false", fmt.Sprintf("NAS 侧返回 HTTP %d（%d 字节）", resp.StatusCode, n)
+	}
+	return "true", fmt.Sprintf("NAS 自测通过：%d 字节，%d ms", n, ms)
+}
+
 // handleSpeechTest 试听：合成一句话直接放出来（不经过大模型）。
 func (a *App) handleSpeechTest(w http.ResponseWriter, r *http.Request) {
 	var in struct {
@@ -460,11 +477,15 @@ func (a *App) handleSpeechTest(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
+	// 自检：让 NAS 自己取一遍这个地址。取不到说明是「音源口/地址」的问题；
+	// 取得到但音箱放不出，就是音箱到 NAS 这段网络的问题。
+	selfOK, selfMsg := probeURL(url)
 	if err := a.xm.PlayURL(url, 0); err != nil {
-		writeJSON(w, 200, map[string]any{"ok": false, "error": err.Error(), "url": url})
+		writeJSON(w, 200, map[string]any{"ok": false, "error": err.Error(), "url": url, "selfCheck": selfMsg})
 		return
 	}
 	writeJSON(w, 200, map[string]any{
 		"ok": true, "url": url, "ms": time.Since(started).Milliseconds(), "voice": voiceLabel(voice),
+		"selfCheck": selfMsg, "selfOk": selfOK,
 	})
 }

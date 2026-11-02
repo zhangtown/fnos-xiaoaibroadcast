@@ -771,10 +771,15 @@ $("speechTest").onclick = async () => {
     const r = await api("/api/speech/test", {engine: $("speechEngine").value, voice: currentSpeechVoice(), base: $("speechBase").value, model: currentSpeechModel(), key: $("speechKey").value, secretId: $("speechSid").value, secretKey: $("speechSkey").value, region: $("speechRegion").value});
     if (r.ok) {
       toast("合成用了 " + (r.ms / 1000).toFixed(1) + " 秒，正在放");
-      $("speechHint").innerHTML = `可用（${esc(r.voice)}，合成 ${(r.ms / 1000).toFixed(1)} 秒）。保存后，讲故事就用这个声音。`;
+      $("speechHint").innerHTML = `可用（${esc(r.voice)}，合成 ${(r.ms / 1000).toFixed(1)} 秒）`
+        + `<br/>音频地址：<a href="${esc(r.url)}" target="_blank" rel="noreferrer">${esc(r.url)}</a>`
+        + `<br/>${r.selfOk ? "✅ " : "⚠️ "}${esc(r.selfCheck || "")}`
+        + `<br/><span style="color:var(--muted)">如果音箱说「播放失败请检查网络」，先用手机连同一个 WiFi 打开上面这个地址：能听 → 音箱到 NAS 的网络问题；打不开 → NAS 的 18090 端口被防火墙挡了。</span>`;
     } else {
       toast("失败", true);
-      $("speechHint").innerHTML = `合成失败：${esc(r.error || "")}（这种情况下故事会自动退回小爱朗读）`;
+      $("speechHint").innerHTML = `合成失败：${esc(r.error || "")}（这种情况下故事会自动退回小爱朗读）`
+        + (r.url ? `<br/>音频地址：${esc(r.url)}` : "")
+        + (r.selfCheck ? `<br/>${esc(r.selfCheck)}` : "");
     }
   } catch (e) { toast(e.message, true); }
   finally { btn.disabled = false; btn.textContent = "试听"; }
