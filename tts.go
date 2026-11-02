@@ -231,6 +231,16 @@ func wsRead(r *bufio.Reader) (byte, []byte, error) {
 
 // ---------- 缓存与投送 ----------
 
+// ttsCachePath 算出某段文本的缓存文件位置（与 synthToFile 的命名一致）。
+func ttsCachePath(cfg Config, text, voice string) (string, string, error) {
+	sum := sha1.Sum([]byte(cfg.Speech.Engine + "\x00" + voice + "\x00" + text))
+	dir := filepath.Join(dataDir(), "tts")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", "", err
+	}
+	return dir, hex.EncodeToString(sum[:8]) + ".mp3", nil
+}
+
 // synthToFile 合成并缓存到数据目录，返回音箱能取到的地址。
 func (a *App) synthToFile(cfg Config, text, voice string) (string, error) {
 	// 两种投送方式：
@@ -343,6 +353,12 @@ func (a *App) handleLive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := strings.TrimPrefix(r.URL.Path, prefix)
+	// 音箱可能先发 HEAD 探一下，那不能把任务吃掉
+	if r.Method == http.MethodHead {
+		w.Header().Set("Content-Type", "audio/mpeg")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
 	v, ok := liveTasks.LoadAndDelete(id)
 	if !ok {
 		http.NotFound(w, r)
@@ -356,7 +372,11 @@ func (a *App) handleLive(w http.ResponseWriter, r *http.Request) {
 	if flusher != nil {
 		flusher.Flush()
 	}
+	// 边吐边攒一份，结束后顺手写进缓存：下次同一段话直接命中，不再花额度
+	started := time.Now()
+	var spool bytes.Buffer
 	err := qwenSynthStream(cfg, task.text, task.voice, func(chunk []byte) error {
+		spool.Write(chunk)
 		if _, werr := w.Write(chunk); werr != nil {
 			return werr
 		}
@@ -367,13 +387,22 @@ func (a *App) handleLive(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		a.store.AddLog("故事", "", false, "流式合成中断："+err.Error())
+		return
+	}
+	a.usage.add(cfg.Speech.Engine+"/"+cfg.Speech.Model, len([]rune(task.text)), time.Since(started).Milliseconds())
+	if spool.Len() > 0 {
+		if dir, name, derr := ttsCachePath(cfg, task.text, task.voice); derr == nil {
+			if werr := os.WriteFile(filepath.Join(dir, name), spool.Bytes(), 0o644); werr == nil {
+				return
+			}
+		}
 	}
 }
 
 // speakStory 讲故事专用：选了合成引擎就先合成再放，失败退回小爱朗读。
 func (a *App) speakStory(cfg Config, text string) error {
 	// 实验模式：先挂任务再递一个“现场合成”的地址给音箱，理论上可以边合成边播
-	if cfg.Speech.Stream && cfg.Speech.Engine == "qwen" && cfg.Music.publicBase() != "" {
+	if cfg.Speech.StreamMode != "file" && cfg.Speech.Engine == "qwen" && cfg.Music.publicBase() != "" {
 		id := requestID()
 		liveTasks.Store(id, liveTask{text: text, voice: cfg.Speech.Voice, at: time.Now()})
 		liveURL := cfg.Music.publicBase() + "/live/" + cfg.Music.Token + "/" + id

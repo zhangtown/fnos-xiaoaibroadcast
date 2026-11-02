@@ -284,9 +284,15 @@
       <div class="grow"><label class="lbl">自定义模型名</label><input type="text" id="speechModelCustom" placeholder="模型 id" /></div>
       <div class="grow"><label class="lbl">自定义音色 id</label><input type="text" id="speechVoiceCustom" placeholder="音色 id" /></div>
     </div>
-    <div class="row" style="margin-top:10px;align-items:center;gap:10px">
-      <label class="switch" style="width:40px"><input type="checkbox" id="speechStream" /><span></span></label>
-      <span style="font-size:12.5px;color:var(--muted)">流式播放（实验）：把「边合成边吐」的地址直接给音箱，理论上点了就出声；不支持渐进播放的音箱会失败，那就关掉。</span>
+    <div class="row" style="margin-top:10px;align-items:flex-end">
+      <div class="grow" style="flex:0 1 320px">
+        <label class="lbl">播放方式</label>
+        <select id="speechStreamMode">
+          <option value="">流式（推荐，点完就出声）</option>
+          <option value="file">文件（合成完再播，兼容老固件）</option>
+        </select>
+      </div>
+      <div class="grow"><div class="tip" style="margin:0">流式：NAS 边合成边吐给音箱（实测小爱支持），长故事也是点完就开口。只对百炼 Qwen 生效，其它引擎自动走文件。</div></div>
     </div>
     <div class="row" id="speechExtRow" style="margin-top:10px">
       <div class="grow"><label class="lbl">TTS 外链前缀（留空=用本应用音源口）</label><input type="text" id="speechExtBase" placeholder="http://192.168.31.68:8090/music/xiaoai-tts" /></div>
@@ -751,7 +757,7 @@ function currentSpeechVoice() {
   });
 });
 // 任何一个语音字段被动过，就标记 dirty，直到保存
-["speechEngine", "speechBase", "speechModel", "speechVoice", "speechModelCustom", "speechVoiceCustom", "speechKey", "speechSid", "speechSkey", "speechRegion", "speechExtBase", "speechExtDir", "speechStream"].forEach((id) => {
+["speechEngine", "speechBase", "speechModel", "speechVoice", "speechModelCustom", "speechVoiceCustom", "speechKey", "speechSid", "speechSkey", "speechRegion", "speechExtBase", "speechExtDir", "speechStreamMode"].forEach((id) => {
   const el = $(id);
   if (!el) return;
   const mark = () => { speechDirty = true; speechStatus(); };
@@ -773,7 +779,7 @@ function speechStatus() {
   if (parts.length) $("speechHint").innerHTML = esc(parts.join(" · "));
 }
 $("speechSave").onclick = async () => {
-  const r = await api("/api/speech", {engine: $("speechEngine").value, voice: currentSpeechVoice(), base: $("speechBase").value, model: currentSpeechModel(), key: $("speechKey").value, secretId: $("speechSid").value, secretKey: $("speechSkey").value, region: $("speechRegion").value, extBase: $("speechExtBase").value, extDir: $("speechExtDir").value, stream: $("speechStream").checked});
+  const r = await api("/api/speech", {engine: $("speechEngine").value, voice: currentSpeechVoice(), base: $("speechBase").value, model: currentSpeechModel(), key: $("speechKey").value, secretId: $("speechSid").value, secretKey: $("speechSkey").value, region: $("speechRegion").value, extBase: $("speechExtBase").value, extDir: $("speechExtDir").value, streamMode: $("speechStreamMode").value});
   toast(r.ok ? "已保存" : (r.error || "保存失败"), !r.ok);
   if (r.ok) { $("speechKey").value = ""; $("speechSkey").value = ""; speechDirty = false; await loadState(); toast("已保存（Key 已写入配置）"); }
 };
@@ -782,7 +788,7 @@ $("speechTest").onclick = async () => {
   const btn = $("speechTest");
   btn.disabled = true; btn.textContent = "合成中…";
   try {
-    const r = await api("/api/speech/test", {engine: $("speechEngine").value, voice: currentSpeechVoice(), base: $("speechBase").value, model: currentSpeechModel(), key: $("speechKey").value, secretId: $("speechSid").value, secretKey: $("speechSkey").value, region: $("speechRegion").value, extBase: $("speechExtBase").value, extDir: $("speechExtDir").value, stream: $("speechStream").checked});
+    const r = await api("/api/speech/test", {engine: $("speechEngine").value, voice: currentSpeechVoice(), base: $("speechBase").value, model: currentSpeechModel(), key: $("speechKey").value, secretId: $("speechSid").value, secretKey: $("speechSkey").value, region: $("speechRegion").value, extBase: $("speechExtBase").value, extDir: $("speechExtDir").value, streamMode: $("speechStreamMode").value});
     if (r.ok) {
       toast("合成用了 " + (r.ms / 1000).toFixed(1) + " 秒，正在放");
       $("speechHint").innerHTML = `可用（${esc(r.voice)}，合成 ${(r.ms / 1000).toFixed(1)} 秒）`
