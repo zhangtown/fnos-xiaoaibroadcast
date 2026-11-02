@@ -149,7 +149,8 @@ func (a *App) startMusicServer() {
 	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	go func() {
 		if err := srv.ListenAndServe(); err != nil {
-			a.store.AddLog("系统", "", false, fmt.Sprintf("音源端口 %s 启动失败：%v", addr, err))
+			a.musicErr = fmt.Sprintf("%s 监听失败：%v", addr, err)
+			a.store.AddLog("系统", "", false, "音源端口 "+addr+" 启动失败："+err.Error())
 		}
 	}()
 }

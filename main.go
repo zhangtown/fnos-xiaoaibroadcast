@@ -30,9 +30,10 @@ var indexHTML []byte
 var version = "dev"
 
 type App struct {
-	store *Store
-	xm    *XM
-	usage *usageStore
+	store    *Store
+	xm       *XM
+	usage    *usageStore
+	musicErr string // 音源端口绑定失败的原因（端口被占、权限不足等）
 }
 
 func main() {
@@ -166,7 +167,7 @@ func (a *App) handleState(w http.ResponseWriter, r *http.Request) {
 		"options":   cfg.Options,
 		"llm": map[string]any{"ready": cfg.LLM.Key != "", "base": cfg.LLM.Base, "model": cfg.LLM.Model, "maxTokens": cfg.LLM.MaxTokens, "effort": cfg.LLM.Effort, "keyMask": maskKey(cfg.LLM.Key)},
 		"storyPrompt": defaultStoryPrompt,
-		"musicCfg": map[string]any{"dirs": cfg.Music.Dirs, "port": cfg.Music.Port, "base": cfg.Music.Base},
+		"musicCfg": map[string]any{"dirs": cfg.Music.Dirs, "port": cfg.Music.Port, "base": cfg.Music.Base, "listenErr": a.musicErr},
 		"speech": map[string]any{"engine": cfg.Speech.Engine, "voice": cfg.Speech.Voice, "base": cfg.Speech.Base, "model": cfg.Speech.Model, "region": cfg.Speech.Region, "hasTencent": cfg.Speech.SecretID != "", "hasKey": cfg.Speech.Key != "", "keyMask": maskKey(cfg.Speech.Key), "hasSecret": cfg.Speech.SecretKey != "", "extBase": cfg.Speech.ExtBase, "extDir": cfg.Speech.ExtDir},
 		"tencentVoices": tencentVoices,
 		"qwenVoices": qwenVoices,

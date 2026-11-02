@@ -169,6 +169,10 @@ func (s *Store) load() error {
 		if len(c.Music.Dirs) == 0 {
 			c.Music.Dirs = defaultMusicLib().Dirs
 		}
+		// 18090 在用户 NAS 上被 1Panel 占了，老配置自动迁到 18095
+		if c.Music.Port == 18090 {
+			c.Music.Port = 18095
+		}
 		s.cfg = &c
 	}
 	s.loadLogs()

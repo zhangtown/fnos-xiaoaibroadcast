@@ -493,7 +493,10 @@ function renderSettings() {
     if (document.activeElement !== $("musicPort")) $("musicPort").value = mc.port || 0;
     if (document.activeElement !== $("musicBase")) $("musicBase").value = mc.base || "";
   }
-  $("musicCfgHint").innerHTML = `改端口或目录后需要重启应用才生效。当前音源地址：<code>${esc(state.music.base || "（未探测到）")}</code>`
+  const listenErr = mc.listenErr || "";
+  $("musicCfgHint").innerHTML = (listenErr
+      ? `⚠️ 音源端口绑定失败：${esc(listenErr)}。换个端口（比如 18095）后保存并重启应用。`
+      : `改端口或目录后需要重启应用才生效。当前音源地址：<code>${esc(state.music.base || "（未探测到）")}</code>`)
     + (formDirty.music ? ` <b>⚠ 有未保存的修改</b>` : "");
 
   const sp = state.speech || {};
